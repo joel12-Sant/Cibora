@@ -1,4 +1,5 @@
-export { auth as middleware } from "next-auth/middleware";
+// NextAuth v4
+export { default } from "next-auth/middleware";
 
 export const config = {
   matcher: ["/dashboard/:path*", "/orders/history/:path*"],
