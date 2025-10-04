@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import Stripe from "stripe";
+import { getStripe } from "@/lib/stripe";
+const stripe = getStripe();
+
 
 export const runtime = "nodejs"; // obligatorio para Stripe SDK en App Router
 export const dynamic = "force-dynamic";
@@ -9,12 +12,6 @@ export const dynamic = "force-dynamic";
 const BodySchema = z.object({
   orderId: z.string().uuid(),
 });
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new Error("Missing STRIPE_SECRET_KEY");
-  return new Stripe(key, { apiVersion: "2025-09-30.clover" });
-}
 
 export async function POST(req: Request) {
   try {
