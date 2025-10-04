@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String?
+  role      Role     @default(CUSTOMER)
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  orders    Order[] // <-- contraparte de Order.user
+  createdAt DateTime @default(now())
+}
+
+model Tenant {
+  id        String       @id @default(uuid())
+  name      String
+  status    TenantStatus @default(PENDING)
+  users     User[]
+  menus     Menu[]
+  orders    Order[]
+  createdAt DateTime     @default(now())
+}
+
+model Menu {
+  id       String     @id @default(uuid())
+  tenantId String
+  tenant   Tenant     @relation(fields: [tenantId], references: [id])
+  name     String
+  items    MenuItem[]
+}
+
+model MenuItem {
+  id     String  @id @default(uuid())
+  menuId String
+  menu   Menu    @relation(fields: [menuId], references: [id])
+  name   String
+  price  Int
+  active Boolean @default(true)
+}
+
+model Order {
+  id        String      @id @default(uuid())
+  tenantId  String
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  status    OrderStatus @default(CREATED)
+  total     Int         @default(0)
+  items     OrderItem[]
+  payments  Payment[] // <-- contraparte de Payment.order
+  createdAt DateTime    @default(now())
+}
+
+model OrderItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+  itemId  String
+  name    String
+  price   Int
+  qty     Int
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  provider  String
+  status    String
+  intentId  String?
+  extRef    String?
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  MERCHANT_OWNER
+  MERCHANT_STAFF
+  COURIER
+  CUSTOMER
+}
+
+enum OrderStatus {
+  CREATED
+  PAID
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELED
+}
+
+enum TenantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
