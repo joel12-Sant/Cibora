@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
-
+import { prisma } from "@/lib/db";
+//
 export async function GET() {
-  // TODO: luego conectamos a Prisma. Hoy devolvemos mock.
-  const data = [
-    { id: "tnt_demo_1", name: "Pizzería Roma" },
-    { id: "tnt_demo_2", name: "Sushi Kyoto" },
-  ];
-  return NextResponse.json({ data, page: 1, pageSize: 20, total: data.length });
+  const tenants = await prisma.tenant.findMany({
+    select: { id: true, name: true, status: true },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+  return NextResponse.json({
+    data: tenants.map(t => ({ id: t.id, name: t.name, status: t.status })),
+    page: 1, pageSize: tenants.length, total: tenants.length
+  });
 }
