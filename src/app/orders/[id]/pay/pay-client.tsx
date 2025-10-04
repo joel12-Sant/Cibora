@@ -1,6 +1,7 @@
+// src/app/orders/[id]/pay/pay-client.tsx
 "use client";
 
-import { loadStripe } from "@stripe/stripe-js";
+import { loadStripe, type StripeElementsOptions, type Appearance } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -8,7 +9,11 @@ import Link from "next/link";
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 export default function PayClient({ clientSecret, orderId }: { clientSecret: string; orderId: string }) {
-  const options = useMemo(() => ({ clientSecret, appearance: { theme: "stripe" } }), [clientSecret]);
+  const appearance: Appearance = { theme: "stripe" };
+  const options: StripeElementsOptions = useMemo(
+    () => ({ clientSecret, appearance }),
+    [clientSecret]
+  );
 
   return (
     <Elements stripe={stripePromise} options={options}>
@@ -33,7 +38,6 @@ function CheckoutForm({ orderId }: { orderId: string }) {
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        // al confirmar desde web redirigimos a la confirmación:
         return_url: `${window.location.origin}/orders/${orderId}/confirmation`,
       },
       redirect: "if_required",
