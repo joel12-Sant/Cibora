@@ -17,7 +17,11 @@ async function getMenu(tenantId: string): Promise<MenuDto | null> {
   return json.data as MenuDto | null;
 }
 
-export default async function RestaurantDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RestaurantDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const menu = await getMenu(id);
 

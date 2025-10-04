@@ -6,13 +6,7 @@ declare module "next-auth" {
     user: {
       id: string;
       role: Role;
-      tenantId?: string | null;
+      tenantId: string | null;
     } & DefaultSession["user"];
-  }
-
-  interface User {
-    id: string;
-    role: Role;
-    tenantId?: string | null;
   }
 }

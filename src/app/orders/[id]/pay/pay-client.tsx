@@ -1,6 +1,6 @@
-// src/app/orders/[id]/pay/pay-client.tsx
 "use client";
-import { loadStripe, type StripeElementsOptions, type Appearance } from "@stripe/stripe-js";
+
+import { loadStripe, type StripeElementsOptions } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -8,10 +8,12 @@ import Link from "next/link";
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 export default function PayClient({ clientSecret, orderId }: { clientSecret: string; orderId: string }) {
-  const appearance: Appearance = { theme: "stripe" };
   const options: StripeElementsOptions = useMemo(
-    () => ({ clientSecret, appearance }),
-    [clientSecret, appearance] // 👈 dependencia añadida
+    () => ({
+      clientSecret,
+      appearance: { theme: "stripe" }, // 👈 dentro del memo
+    }),
+    [clientSecret]
   );
 
   return (
@@ -20,6 +22,7 @@ export default function PayClient({ clientSecret, orderId }: { clientSecret: str
     </Elements>
   );
 }
+
 
 function CheckoutForm({ orderId }: { orderId: string }) {
   const stripe = useStripe();

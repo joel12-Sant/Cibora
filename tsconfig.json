@@ -16,6 +16,6 @@
     "plugins": [{ "name": "next" }],
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["next-env.d.ts", "app", "src", ".next/types/**/*.ts"],
+  "include": ["next-env.d.ts", "app", "src", ".next/types/**/*.ts","src/types/**/*.d.ts"],
   "exclude": ["node_modules", "scripts", "prisma/*.ts"]
 }
