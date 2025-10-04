@@ -17,6 +17,8 @@
     "prisma": "^6.16.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "sprite": "^0.0.1",
+    "stripe": "^19.1.0",
     "zod": "^4.1.11"
   },
   "devDependencies": {
