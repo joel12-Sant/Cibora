@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
-const stripe = getStripe();
 
 
-export const runtime = "nodejs"; // obligatorio para Stripe SDK en App Router
+export const runtime = "nodejs"; 
 export const dynamic = "force-dynamic";
 
 const BodySchema = z.object({

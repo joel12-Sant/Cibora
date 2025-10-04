@@ -1,8 +1,6 @@
 import Link from "next/link";
 import QuickBuy from "@/features/orders/QuickBuy";
 
-type Props = { params: Promise<{ id: string }> }; // ⬅️ Promise
-
 type MenuItem = { id: string; name: string; price: number; active: boolean };
 type MenuDto = { id: string; name: string; items: MenuItem[] };
 

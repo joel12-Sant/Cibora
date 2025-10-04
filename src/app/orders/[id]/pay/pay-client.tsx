@@ -1,6 +1,5 @@
 // src/app/orders/[id]/pay/pay-client.tsx
 "use client";
-
 import { loadStripe, type StripeElementsOptions, type Appearance } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useMemo, useState } from "react";
@@ -12,7 +11,7 @@ export default function PayClient({ clientSecret, orderId }: { clientSecret: str
   const appearance: Appearance = { theme: "stripe" };
   const options: StripeElementsOptions = useMemo(
     () => ({ clientSecret, appearance }),
-    [clientSecret]
+    [clientSecret, appearance] // 👈 dependencia añadida
   );
 
   return (
