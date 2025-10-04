@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import Stripe from "stripe";
+import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs"; // usar Node runtime
 export const dynamic = "force-dynamic";
@@ -8,12 +9,6 @@ export const dynamic = "force-dynamic";
 // Lee raw body (Stripe exige payload sin parsear JSON)
 async function readRawBody(req: Request): Promise<string> {
   return await req.text();
-}
-
-function getStripe() {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new Error("Missing STRIPE_SECRET_KEY");
-  return new Stripe(key, { apiVersion: "2025-09-30.clover" });
 }
 
 export async function POST(req: Request) {
