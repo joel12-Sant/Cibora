@@ -1,5 +1,6 @@
 import { PrismaClient, Role, TenantStatus } from "@prisma/client";
 const prisma = new PrismaClient();
+import bcrypt from "bcryptjs";
 
 async function main() {
   const merchant = await prisma.tenant.create({
@@ -25,3 +26,6 @@ async function main() {
 }
 
 main().finally(() => prisma.$disconnect());
+// al final de main()
+const hash = await bcrypt.hash("secret123", 10);
+await prisma.user.upsert({ where: { email: "test@cibora.app" }, update: { password: hash }, create: { email: "test@cibora.app", password: hash, role: Role.CUSTOMER } });

@@ -67,7 +67,7 @@ export async function POST(req: Request) {
         currency: "mxn",
         metadata: { order_id: order.id, tenant_id: order.tenantId },
         // Opcional: automatic_payment_methods
-        automatic_payment_methods: { enabled: true, allow_redirects: "never" },
+        payment_method_types: ["card"], 
       });
 
       await prisma.payment.create({

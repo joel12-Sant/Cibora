@@ -42,7 +42,11 @@ export default function QuickBuy({ tenantId, itemId }: Props) {
       >
         {loading ? "Agregando..." : "Agregar"}
       </button>
-      {ok && <span className="text-xs opacity-80">Orden: {ok}</span>}
+      {ok && (
+        <a className="text-xs underline" href={`/orders/${ok}/pay`}>
+          Pagar →
+        </a>
+      )}
       {err && <span className="text-xs text-red-400">{err}</span>}
     </div>
   );

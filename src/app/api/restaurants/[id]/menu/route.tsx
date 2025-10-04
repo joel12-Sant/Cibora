@@ -1,3 +1,4 @@
+// TODO: migrar cuando Next permita sync params
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
