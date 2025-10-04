@@ -34,7 +34,6 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async session({ session, user }) {
-      // castea el user de Prisma al shape que necesitas
       const u = user as unknown as DbUser;
       if (session.user) {
         session.user.id = u.id;
