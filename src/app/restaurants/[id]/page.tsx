@@ -1,4 +1,5 @@
 import Link from "next/link";
+import QuickBuy from "@/features/orders/QuickBuy";
 
 type Props = { params: Promise<{ id: string }> }; // ⬅️ Promise
 
@@ -18,8 +19,8 @@ async function getMenu(tenantId: string): Promise<MenuDto | null> {
   return json.data as MenuDto | null;
 }
 
-export default async function RestaurantDetailPage({ params }: Props) {
-  const { id } = await params;               // ⬅️ await aquí
+export default async function RestaurantDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const menu = await getMenu(id);
 
   if (!menu) {
@@ -42,9 +43,7 @@ export default async function RestaurantDetailPage({ params }: Props) {
               <div className="font-medium">{item.name}</div>
               <div className="text-sm opacity-80">$ {item.price}</div>
             </div>
-            <button disabled={!item.active} className="rounded-lg border px-4 py-2 hover:bg-white/5 disabled:opacity-50">
-              Agregar
-            </button>
+            <QuickBuy tenantId={id} itemId={item.id} />
           </li>
         ))}
       </ul>
