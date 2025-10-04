@@ -1,11 +1,10 @@
+// src/features/orders/QuickBuy.tsx
+
 "use client";
 
 import { useState } from "react";
 
-type Props = {
-  tenantId: string;
-  itemId: string;
-};
+type Props = { tenantId: string; itemId: string };
 
 export default function QuickBuy({ tenantId, itemId }: Props) {
   const [loading, setLoading] = useState(false);
@@ -20,16 +19,15 @@ export default function QuickBuy({ tenantId, itemId }: Props) {
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          tenantId,
-          items: [{ id: itemId, qty: 1 }],
-        }),
+        body: JSON.stringify({ tenantId, items: [{ id: itemId, qty: 1 }] }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? "Order failed");
       setOk(json.order?.id ?? "ok");
-    } catch (e: any) {
-      setErr(e.message ?? "Error");
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : typeof e === "string" ? e : "Error";
+      setErr(message);
     } finally {
       setLoading(false);
     }
