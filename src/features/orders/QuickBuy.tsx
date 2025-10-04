@@ -23,7 +23,9 @@ export default function QuickBuy({ tenantId, itemId }: Props) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? "Order failed");
-      setOk(json.order?.id ?? "ok");
+      const id = json.orderId ?? json.order?.id; // 👈 soporta ambos contratos
+      if (!id) throw new Error("Order id missing");
+      setOk(id);
     } catch (e: unknown) {
       const message =
         e instanceof Error ? e.message : typeof e === "string" ? e : "Error";

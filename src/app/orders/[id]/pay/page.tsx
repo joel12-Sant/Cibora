@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import PayClient from "./pay-client";
+import { headers } from "next/headers";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -20,7 +21,12 @@ export default async function PayPage({ params }: Props) {
   }
 
   // Llamamos a /api/checkout desde el servidor para obtener el clientSecret
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/checkout`, {
+  const h = await headers();
+  const host = h.get("host")!;
+  const protocol = host.includes("localhost") ? "http" : "https";
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? `${protocol}://${host}`;
+
+  const res = await fetch(`${base}/api/checkout`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ orderId: id }),
