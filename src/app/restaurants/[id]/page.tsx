@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-type Props = { params: { id: string } };
+type Props = { params: Promise<{ id: string }> }; // ⬅️ Promise
+
 type MenuItem = { id: string; name: string; price: number; active: boolean };
 type MenuDto = { id: string; name: string; items: MenuItem[] };
 
@@ -18,7 +19,8 @@ async function getMenu(tenantId: string): Promise<MenuDto | null> {
 }
 
 export default async function RestaurantDetailPage({ params }: Props) {
-  const menu = await getMenu(params.id);
+  const { id } = await params;               // ⬅️ await aquí
+  const menu = await getMenu(id);
 
   if (!menu) {
     return (
