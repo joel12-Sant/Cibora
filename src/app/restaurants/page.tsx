@@ -1,4 +1,5 @@
 type Restaurant = { id: string; name: string };
+import Link from "next/link";
 
 async function getRestaurants(): Promise<Restaurant[]> {
   const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/restaurants`, {
@@ -20,9 +21,9 @@ export default async function RestaurantsPage() {
         {restaurants.map((r) => (
           <li key={r.id} className="rounded-xl border p-4">
             <div className="font-medium">{r.name}</div>
-            <a className="text-sm opacity-80 hover:underline" href={`/restaurants/${r.id}`}>
+            <Link className="text-sm opacity-80 hover:underline" href={`/restaurants/${r.id}`}>
               Ver menú →
-            </a>
+            </Link>
           </li>
         ))}
       </ul>
