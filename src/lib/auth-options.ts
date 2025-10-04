@@ -5,16 +5,14 @@ import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import type { Role } from "@prisma/client";
 
-type DbUser = {
-  id: string;
-  role: Role;
-  tenantId: string | null;
-};
+type DbUser = { id: string; role: Role; tenantId: string | null };
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma), 
-  session: { strategy: "database" },
-  pages: { signIn: "/auth/signin" },
+  adapter: PrismaAdapter(prisma),
+  session: { strategy: "jwt" },                 // 👈 cambia a JWT
+  // Para evitar confusiones por ahora usa la pantalla por defecto:
+  // (si quieres tu página custom, vuelve a poner pages.signIn luego)
+  // pages: { signIn: "/auth/signin" },
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -26,19 +24,26 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) return null;
         const user = await prisma.user.findUnique({ where: { email: credentials.email } });
         if (!user || !user.passwordHash) return null;
-
         const ok = await bcrypt.compare(credentials.password, user.passwordHash);
         return ok ? user : null;
       },
     }),
   ],
   callbacks: {
-    async session({ session, user }) {
-      const u = user as unknown as DbUser;
+    async jwt({ token, user }) {
+      if (user) {
+        const u = user as unknown as DbUser;
+        token.id = u.id;
+        token.role = u.role;
+        token.tenantId = u.tenantId;
+      }
+      return token;
+    },
+    async session({ session, token }) {
       if (session.user) {
-        session.user.id = u.id;
-        session.user.role = u.role;
-        session.user.tenantId = u.tenantId;
+        if (token.id) session.user.id = token.id as string;
+        if (token.role) session.user.role = token.role as Role;
+        session.user.tenantId = (token.tenantId as string | null) ?? null;
       }
       return session;
     },

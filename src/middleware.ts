@@ -1,5 +1,11 @@
-export { default } from "next-auth/middleware";
+import { withAuth } from "next-auth/middleware";
+
+export default withAuth({
+  callbacks: {
+    authorized: ({ token }) => !!token, // hay JWT => pasa
+  },
+});
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/orders/history/:path*"],
+  matcher: ["/dashboard/:path*", "/orders/history/:path*"], // 👈 NO incluyas "/"
 };
