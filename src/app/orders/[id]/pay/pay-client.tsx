@@ -1,17 +1,17 @@
 "use client";
 
-import { loadStripe, type StripeElementsOptions } from "@stripe/stripe-js";
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useMemo, useState } from "react";
-import Link from "next/link";
+import { loadStripe } from "@stripe/stripe-js";
+import { useCallback, useMemo, useState } from "react";
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 export default function PayClient({ clientSecret, orderId }: { clientSecret: string; orderId: string }) {
-  const options: StripeElementsOptions = useMemo(
+  // ⚠️ mueve appearance adentro del useMemo para que no sea dependencia cambiante
+  const options = useMemo(
     () => ({
       clientSecret,
-      appearance: { theme: "stripe" }, // 👈 dentro del memo
+      appearance: { theme: "stripe" as const },
     }),
     [clientSecret]
   );
@@ -23,51 +23,51 @@ export default function PayClient({ clientSecret, orderId }: { clientSecret: str
   );
 }
 
-
 function CheckoutForm({ orderId }: { orderId: string }) {
   const stripe = useStripe();
   const elements = useElements();
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stripe || !elements) return;
 
-    setLoading(true);
+    setSubmitting(true);
     setMsg(null);
 
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
+        // redirige al confirmar (stripe puede necesitar redirección 3DS)
         return_url: `${window.location.origin}/orders/${orderId}/confirmation`,
       },
       redirect: "if_required",
     });
 
-    if (error) setMsg(error.message ?? "Pago no completado");
-    else setMsg("Pago en proceso…");
+    setSubmitting(false);
 
-    setLoading(false);
-  };
+    if (error) {
+      // Mostrar mensaje claro en UI
+      setMsg(error.message ?? "No se pudo procesar el pago.");
+      return;
+    }
+
+    // Si no hubo redirect y no hay error, navegamos manualmente
+    window.location.assign(`/orders/${orderId}/confirmation`);
+  }, [stripe, elements, orderId]);
 
   return (
-    <form onSubmit={onSubmit} className="max-w-md space-y-4">
+    <form onSubmit={onSubmit} className="space-y-4">
       <PaymentElement />
+      {!!msg && <p className="text-sm text-red-500">{msg}</p>}
       <button
         type="submit"
-        disabled={loading || !stripe || !elements}
+        disabled={!stripe || submitting}
         className="rounded-lg border px-4 py-2 hover:bg-white/5 disabled:opacity-50"
       >
-        {loading ? "Procesando…" : "Pagar"}
+        {submitting ? "Procesando…" : "Pagar"}
       </button>
-
-      {msg && <div className="text-sm opacity-80">{msg}</div>}
-      <div className="text-sm">
-        <Link href={`/orders/${orderId}/confirmation`} className="underline">
-          Ver confirmación
-        </Link>
-      </div>
     </form>
   );
 }

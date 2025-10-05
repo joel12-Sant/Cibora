@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Providers from "./providers";
 import AuthButton from "@/components//Auth-buttons";
+import CartBadge from "@/components//CarrtBadge";
 
 export const metadata = {
   title: "Cibora",
@@ -19,8 +20,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href="/" className="hover:underline mr-4">Inicio</Link>
                 <Link href="/restaurants" className="hover:underline">Restaurantes</Link>
               </nav>
-              <AuthButton />
+              <div className="flex items-center gap-3">
+                <CartBadge />
+                <AuthButton />
+              </div>
             </header>
+
             {children}
           </div>
         </Providers>
