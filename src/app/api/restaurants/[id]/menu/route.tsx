@@ -1,31 +1,24 @@
-// TODO: migrar cuando Next permita sync params
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-type Ctx = { params: Promise<{ id: string }> }; // ⬅️ Promise
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params; // id = Tenant/Restaurant id
+  
+  const menu = await prisma.menu.findFirst({
+    where: { tenantId: id },
+    select: { id: true },
+  });
 
-export async function GET(_req: Request, ctx: Ctx) {
-  try {
-    const { id } = await ctx.params;         // ⬅️ await aquí
-    const tenant = await prisma.tenant.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (!tenant) return NextResponse.json({ error: "Restaurant not found" }, { status: 404 });
+  if (!menu) return NextResponse.json({ items: [] });
 
-    const menu = await prisma.menu.findFirst({
-      where: { tenantId: id },
-      select: {
-        id: true,
-        name: true,
-        items: { select: { id: true, name: true, price: true, active: true } },
-      },
-      orderBy: { name: "asc" },
-    });
+  const items = await prisma.menuItem.findMany({
+    where: { menuId: menu.id },
+    select: { id: true, name: true, price: true, active: true },
+    orderBy: { name: "asc" },
+  });
 
-    return NextResponse.json({ data: menu ?? null });
-  } catch (err) {
-    console.error(err);
-    return NextResponse.json({ error: "Internal error" }, { status: 500 });
-  }
+  return NextResponse.json({ items });
 }
