@@ -11,6 +11,7 @@ import type { JWT } from "next-auth/jwt";
 type DbUser = Pick<User, "id" | "role" | "tenantId">;
 
 export const authOptions: NextAuthOptions = {
+  pages: { signIn: "/auth/signin" },
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   providers: [
