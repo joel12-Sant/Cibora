@@ -1,4 +1,5 @@
 "use client";
+
 import { signIn, signOut, useSession } from "next-auth/react";
 
 export default function AuthButton() {
@@ -15,6 +16,7 @@ export default function AuthButton() {
       </button>
     );
   }
+
   return (
     <div className="flex items-center gap-3">
       <span className="text-sm opacity-80">{data.user.email}</span>

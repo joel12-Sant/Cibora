@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Providers from "./providers";
-import AuthButton from "@/components/auth-buttons";
+import AuthButton from "@/components//Auth-buttons";
 
 export const metadata = {
   title: "Cibora",
