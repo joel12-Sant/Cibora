@@ -1,6 +1,6 @@
-import { PrismaClient, Role, TenantStatus } from "@prisma/client";
-const prisma = new PrismaClient();
+import { PrismaClient, TenantStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
+const prisma = new PrismaClient();
 
 async function main() {
   const merchant = await prisma.tenant.create({
@@ -8,7 +8,7 @@ async function main() {
   });
 
   await prisma.user.create({
-    data: { email: "owner@roma.test", role: Role.MERCHANT_OWNER, tenantId: merchant.id },
+    data: { email: "owner@roma.test", role: "MERCHANT_OWNER", tenantId: merchant.id },
   });
 
   const menu = await prisma.menu.create({
@@ -22,10 +22,15 @@ async function main() {
     ],
   });
 
+  // usuario de prueba con passwordHash:
+  const hash = await bcrypt.hash("secret123", 10);
+  await prisma.user.upsert({
+    where: { email: "test@cibora.app" },
+    update: { passwordHash: hash, role: "CUSTOMER" },
+    create: { email: "test@cibora.app", passwordHash: hash, role: "CUSTOMER" },
+  });
+
   console.log("Seed listo.");
 }
 
 main().finally(() => prisma.$disconnect());
-// al final de main()
-const hash = await bcrypt.hash("secret123", 10);
-await prisma.user.upsert({ where: { email: "test@cibora.app" }, update: { password: hash }, create: { email: "test@cibora.app", password: hash, role: Role.CUSTOMER } });
