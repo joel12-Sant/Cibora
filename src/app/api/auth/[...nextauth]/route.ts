@@ -1,6 +1,9 @@
 import NextAuth from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 
-export const runtime = "nodejs"; // 👈 importante en App Router
+// Fuerza Node.js para NextAuth en App Router
+export const runtime = "nodejs";
 
-export const { GET, POST } = NextAuth(authOptions);
+// v4: crea el handler y reexpórtalo como GET/POST
+const handler = NextAuth(authOptions);
+export { handler as GET, handler as POST };
