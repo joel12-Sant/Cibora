@@ -1,5 +1,5 @@
 import Link from "next/link";
-import SigninForm from "./signinForm";
+import SigninForm from "./SigninForm";
 
 // Next 15: searchParams es Promise
 export default async function SignInPage({
