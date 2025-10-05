@@ -3,9 +3,12 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
-import type { User } from "@prisma/client"; // 👈 usa el modelo para tipar
+import type { User } from "@prisma/client";
+import type { JWT } from "next-auth/jwt";
 
-type DbUser = Pick<User, "id" | "role" | "tenantId">; // 👈 sin enums
+// … providers / adapter (tu código) …
+
+type DbUser = Pick<User, "id" | "role" | "tenantId">;
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -17,33 +20,36 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
-        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
-        if (!user?.passwordHash) return null;
-        const ok = await bcrypt.compare(credentials.password, user.passwordHash);
-        return ok ? user : null;
+      async authorize(c) {
+        if (!c?.email || !c?.password) return null;
+        const u = await prisma.user.findUnique({ where: { email: c.email } });
+        if (!u?.passwordHash) return null;
+        const ok = await bcrypt.compare(c.password, u.passwordHash);
+        return ok ? u : null;
       },
     }),
   ],
+
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }): Promise<JWT> {
       if (user) {
-        const u = user as DbUser;       // 👈 role viene tipado de User
+        const u = user as DbUser;
         token.id = u.id;
-        token.role = u.role;            // tipo = User["role"]
+        token.role = u.role;
         token.tenantId = u.tenantId ?? null;
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.id as string;
-        (session.user as any).role = token.role as User["role"];   // 👈 sin enums
-        (session.user as any).tenantId = (token.tenantId as string | null) ?? null;
+        if (token.id) session.user.id = token.id;
+        if (token.role) session.user.role = token.role;
+        session.user.tenantId = token.tenantId ?? null;
       }
       return session;
     },
   },
+
   secret: process.env.NEXTAUTH_SECRET,
 };
