@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Providers from "./providers";
-import AuthButton from "@/components//Auth-buttons";
-import CartBadge from "@/components//CarrtBadge";
+import AuthButton from "@/components/auth-buttons";
+import CartBadge from "@/components/CarrtBadge";
 
 export const metadata = {
   title: "Cibora",
