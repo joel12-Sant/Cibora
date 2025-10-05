@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth"; // o getServerSession si tienes helper
 import { prisma } from "@/lib/db";
 import Link from "next/link";
-import { OrderStatus } from "@prisma/client";
 
 export default async function OrdersHistoryPage() {
   const session = await auth();

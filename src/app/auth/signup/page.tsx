@@ -28,7 +28,7 @@ export default function SignUpPage() {
         setMsg(j?.error ?? "No se pudo crear la cuenta");
       }
     } catch (e) {
-      setMsg("Error de red");
+      setMsg(`Error de red ${e}`);
     } finally {
       setLoading(false);
     }

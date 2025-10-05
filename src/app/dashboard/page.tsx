@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
-import { OrderStatus, Role } from "@prisma/client";
+import { Role } from "@prisma/client";
 import ItemsTable from "@/app/dashboard/ItemsTable"; // Componente client-side
 
 
