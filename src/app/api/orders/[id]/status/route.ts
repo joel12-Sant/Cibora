@@ -20,27 +20,34 @@ const BodySchema = z.object({
   status: z.nativeEnum(OrderStatus),
 });
 
-type Params = { params: { id: string } };
-
-export async function PATCH(req: NextRequest, { params }: Params) {
-  const orderId = params.id;
+// ⬇️ Firma compatible con Next 15 (params asíncronos)
+export async function PATCH(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  // ⬇️ Espera los params
+  const { id: orderId } = await context.params;
 
   const json = await req.json().catch(() => ({}));
   const parsed = BodySchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid payload", issues: parsed.error.flatten() }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid payload", issues: parsed.error.flatten() },
+      { status: 400 }
+    );
   }
   const nextStatus = parsed.data.status;
 
   const session = await auth();
   const email = session?.user?.email ?? null;
-  const role: Role | undefined = session?.user?.role; // ✅ ya tipado por la declaración
+  const role: Role | undefined = session?.user?.role;
   const userTenantId = session?.user?.tenantId ?? null;
 
   if (!email || !role) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const isMerchant = role === "MERCHANT_OWNER" || role === "MERCHANT_STAFF" || role === "ADMIN";
+  const isMerchant =
+    role === "MERCHANT_OWNER" || role === "MERCHANT_STAFF" || role === "ADMIN";
   if (!isMerchant || !userTenantId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -57,7 +64,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const allowed = ALLOWED[order.status];
   if (!allowed.includes(nextStatus)) {
-    return NextResponse.json({ error: `Invalid transition ${order.status} -> ${nextStatus}` }, { status: 400 });
+    return NextResponse.json(
+      { error: `Invalid transition ${order.status} -> ${nextStatus}` },
+      { status: 400 }
+    );
   }
 
   try {
@@ -71,8 +81,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     });
 
     return NextResponse.json({ order: updated }, { status: 200 });
-  } catch (err: unknown) {                  // ✅ sin any
-    const e = err as Prisma.PrismaClientKnownRequestError; // cast explícito si lo necesitas
+  } catch (err: unknown) {
+    const e = err as Prisma.PrismaClientKnownRequestError;
     console.error("order status patch error:", e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
