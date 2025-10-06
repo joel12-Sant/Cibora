@@ -1,5 +1,8 @@
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+// app/api/restaurants/[id]/menu/route.ts
 
 export async function GET(
   _req: Request,
