@@ -1,11 +1,10 @@
-import { auth } from "@/lib/auth"; // o getServerSession si tienes helper
+import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 
 export default async function OrdersHistoryPage() {
   const session = await auth();
   if (!session?.user?.id) {
-    // redirige a signin con callback
     return (
       <main className="mx-auto max-w-2xl p-6">
         <p className="mb-4">Necesitas iniciar sesión para ver tus pedidos.</p>

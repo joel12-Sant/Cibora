@@ -42,7 +42,6 @@ export async function POST(req: Request) {
         });
 
         if (!payment) {
-          // No tenemos registro (raro): creamos uno mínimo para trazabilidad
           console.warn("Payment not found for intent; creating placeholder");
           await prisma.payment.create({
             data: {
