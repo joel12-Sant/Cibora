@@ -1,4 +1,4 @@
-// app/api/checkout/route.ts
+// src/app/api/checkout/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -8,85 +8,73 @@ import { auth } from "@/lib/auth";
 import { getStripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
-  const stripe = getStripe();
-
   try {
     const session = await auth();
-    const email = session?.user?.email ?? null;
-    const userId = session?.user?.id ?? null;
-    if (!email || !userId) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }
 
-    const { orderId } = await req.json().catch(() => ({} as { orderId?: string }));
-    if (!orderId) return NextResponse.json({ error: "orderId requerido" }, { status: 400 });
+    const { orderId } = (await req.json().catch(() => ({}))) as { orderId?: string };
+    if (!orderId) {
+      return NextResponse.json({ error: "orderId requerido" }, { status: 400 });
+    }
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, userId: true, tenantId: true, status: true, total: true }
+      select: { id: true, userId: true, tenantId: true, status: true, total: true },
     });
 
     if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
-    if (order.userId !== userId) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    if (order.total <= 0) return NextResponse.json({ error: "Total inválido" }, { status: 400 });
-    if (order.status !== "CREATED" && order.status !== "PAID") {
-      return NextResponse.json({ error: `Estado no pagable: ${order.status}` }, { status: 409 });
+    if (order.userId !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    // Determina el monto en centavos (soporta DB en pesos o en centavos)
+    // Si total ya es "grande" (>= $10 * 100), asumimos que ya está en centavos; si no, convertimos desde pesos.
+    const amountCents = order.total >= 1000 ? order.total : Math.round(order.total * 100);
+
+    if (amountCents < 1000) {
+      return NextResponse.json(
+        { error: "El monto mínimo de pago es $10.00 MXN. Ajusta tu carrito." },
+        { status: 400 },
+      );
     }
 
-    // ¿Ya existe un Payment para Stripe?
+    const stripe = getStripe();
+
+    // Busca si ya hay Payment para esta orden con Stripe
     const existing = await prisma.payment.findFirst({
       where: { orderId: order.id, provider: "stripe" },
-      select: { id: true, intentId: true, status: true }
+      select: { id: true, intentId: true, status: true },
     });
 
     let intent;
     if (existing?.intentId) {
-      // ✅ solo campos actualizables
+      // UPDATE: SOLO campos actualizables (NO currency, NO automatic_payment_methods)
       intent = await stripe.paymentIntents.update(existing.intentId, {
-        amount: order.total,
-        metadata: { order_id: order.id, tenant_id: order.tenantId },
+        amount: amountCents,
+        metadata: { order_id: order.id, tenant_id: order.tenantId ?? "" },
       });
     } else {
-      // ✅ crear con APM y currency
+      // CREATE: aquí sí se puede usar automatic_payment_methods y currency
       intent = await stripe.paymentIntents.create({
-        amount: order.total,
+        amount: amountCents,
         currency: "mxn",
-        metadata: { order_id: order.id, tenant_id: order.tenantId },
+        metadata: { order_id: order.id, tenant_id: order.tenantId ?? "" },
         automatic_payment_methods: { enabled: true },
+      });
+
+      // Creamos registro Payment si no existía
+      await prisma.payment.create({
+        data: { orderId: order.id, provider: "stripe", status: "PENDING", intentId: intent.id },
       });
     }
 
-    // Idempotente: upsert del Payment por (orderId, provider)
-    await prisma.payment.upsert({
-      where: {
-        // necesitas un unique compuesto en Prisma para esto si quieres máxima garantía:
-        // @@unique([orderId, provider])
-        // si no lo tienes aún, usa un where por id cuando exista y fallback a create.
-        id: existing?.id ?? "______fallback______" // truco: si no existe, forzamos create
-      },
-      create: {
-        orderId: order.id,
-        provider: "stripe",
-        status: "PENDING",
-        intentId: intent.id
-      },
-      update: {
-        intentId: intent.id,
-        status: existing?.status === "SUCCEEDED" ? "SUCCEEDED" : "PENDING"
-      }
-    }).catch(async () => {
-      // si no tienes el índice único, hacemos create/update manual
-      if (existing) {
-        await prisma.payment.update({
-          where: { id: existing.id },
-          data: { intentId: intent.id, status: existing.status === "SUCCEEDED" ? "SUCCEEDED" : "PENDING" }
-        });
-      } else {
-        await prisma.payment.create({
-          data: { orderId: order.id, provider: "stripe", status: "PENDING", intentId: intent.id }
-        });
-      }
-    });
+    // Si existía, mantenemos el registro sincronizado
+    if (existing) {
+      await prisma.payment.update({
+        where: { id: existing.id },
+        data: { intentId: intent.id, status: existing.status === "SUCCEEDED" ? "SUCCEEDED" : "PENDING" },
+      });
+    }
 
     return NextResponse.json({ clientSecret: intent.client_secret });
   } catch (e) {

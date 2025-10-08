@@ -6,7 +6,7 @@ import ClientStatusRefresher from "./refresher";
 
 type Params = { params: Promise<{ id: string }> };
 
-export const dynamic = "force-dynamic"; // siempre leer estado real
+export const dynamic = "force-dynamic"; 
 
 const mxn = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 
@@ -47,14 +47,14 @@ export default async function ConfirmationPage({ params }: Params) {
         <ul className="text-sm space-y-1">
           {order.items.map((it, i) => (
             <li key={i}>
-              {it.qty} × {it.name} — {mxn.format((it.price * it.qty) / 100)}
+              {it.qty} × {it.name} — {mxn.format((it.price * it.qty))}
             </li>
           ))}
         </ul>
-        <p className="mt-3 font-semibold">Total: {mxn.format(order.total / 100)}</p>
+        <p className="mt-3 font-semibold">Total: {mxn.format(order.total)}</p>
       </section>
 
-      {needsRefresh ? (
+      {(order.status === OrderStatus.CREATED) ? (
         <p className="text-sm text-gray-500">
           Estamos confirmando tu pago… esta página se actualizará automáticamente.
         </p>

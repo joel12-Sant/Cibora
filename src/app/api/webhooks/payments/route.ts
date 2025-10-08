@@ -1,4 +1,4 @@
-// app/api/webhooks/payments/route.ts
+// src/app/api/webhooks/payments/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -8,15 +8,12 @@ import { getStripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
-
   const sig = req.headers.get("stripe-signature");
-  if (!sig) {
-    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
-  }
+  if (!sig) return NextResponse.json({ error: "Missing signature" }, { status: 400 });
 
   let event;
   try {
-    // ⚠️ cuerpo crudo para verificar firma del webhook
+    // ⚠️ cuerpo crudo para verificar la firma
     const raw = await req.text();
     event = stripe.webhooks.constructEvent(raw, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err) {
@@ -28,22 +25,24 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "payment_intent.succeeded": {
         const pi = event.data.object as { id: string; metadata?: Record<string, string> };
-        const orderId = pi.metadata?.order_id;
-        if (!orderId) break;
+        const orderId = pi.metadata?.order_id ?? "";
+        if (!orderId) {
+          console.warn("PI succeeded sin order_id en metadata", pi.id);
+          break;
+        }
 
-        // Idempotente: si ya está SUCCEEDED, no hacemos nada
         const payment = await prisma.payment.findFirst({
           where: { intentId: pi.id, provider: "stripe" },
-          select: { id: true, status: true, orderId: true },
+          select: { id: true, status: true },
         });
 
-        if (payment?.status === "SUCCEEDED") break;
+        if (payment?.status === "SUCCEEDED") break; // idempotente
 
         await prisma.$transaction(async (tx) => {
           if (payment) {
             await tx.payment.update({
               where: { id: payment.id },
-              data: { status: "SUCCEEDED", extRef: pi.id },
+              data: { status: "SUCCEEDED", extRef: event.id },
             });
           } else {
             await tx.payment.create({
@@ -52,17 +51,17 @@ export async function POST(req: NextRequest) {
                 provider: "stripe",
                 status: "SUCCEEDED",
                 intentId: pi.id,
-                extRef: pi.id,
+                extRef: event.id,
               },
             });
           }
 
-          // Marca la orden como pagada (si ya lo está, no rompe)
           await tx.order.update({
             where: { id: orderId },
             data: { status: "PAID" },
           });
         });
+
         break;
       }
 
@@ -72,6 +71,7 @@ export async function POST(req: NextRequest) {
           where: { intentId: pi.id, provider: "stripe" },
           select: { id: true },
         });
+
         if (payment) {
           await prisma.payment.update({
             where: { id: payment.id },
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
       }
 
       default:
-        // otros eventos: ignorar
+        // ignorar otros eventos
         break;
     }
 
