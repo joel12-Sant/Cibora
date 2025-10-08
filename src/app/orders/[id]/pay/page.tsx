@@ -1,18 +1,27 @@
 import { prisma } from "@/lib/db";
 import PayClient from "./pay-client";
 import { headers } from "next/headers";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 type Props = { params: Promise<{ id: string }> };
+
+export const dynamic = "force-dynamic";
 
 export default async function PayPage({ params }: Props) {
   const { id } = await params;
 
-  // Validamos que la orden exista y esté en CREATED
+  // Requiere sesión
+  const session = await auth();
+  if (!session) {
+    redirect(`/auth/signin?callbackUrl=/orders/${id}/pay`);
+  }
+
+  // Validar orden
   const order = await prisma.order.findUnique({
     where: { id },
     select: { id: true, status: true, total: true, tenantId: true },
   });
-
   if (!order) {
     return <main className="p-6">Orden no encontrada.</main>;
   }
@@ -20,22 +29,26 @@ export default async function PayPage({ params }: Props) {
     return <main className="p-6">Esta orden no está disponible para pago: {order.status}</main>;
   }
 
-  // Llamamos a /api/checkout desde el servidor para obtener el clientSecret
-  const h = await headers();
-  const host = h.get("host")!;
+  // Construye base URL y reenvía cookie
+  const h = await headers(); // ← importante
+  const host = h.get("host") ?? "localhost:3000";
   const protocol = host.includes("localhost") ? "http" : "https";
   const base = process.env.NEXT_PUBLIC_APP_URL ?? `${protocol}://${host}`;
+  const cookie = h.get("cookie") ?? "";
 
   const res = await fetch(`${base}/api/checkout`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      cookie, // ← pasa la sesión al endpoint
+    },
     body: JSON.stringify({ orderId: id }),
     cache: "no-store",
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    return <main className="p-6">No se pudo iniciar el pago: {err}</main>;
+    const errText = await res.text().catch(() => "");
+    return <main className="p-6">No se pudo iniciar el pago: {errText || res.statusText}</main>;
   }
 
   const { clientSecret } = (await res.json()) as { clientSecret: string };

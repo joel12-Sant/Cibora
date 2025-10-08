@@ -1,9 +1,12 @@
-// Helper único para crear el cliente de Stripe sin fijar apiVersion.
-// Si ya tienes este archivo, asegúrate de exportar solo la función.
+// lib/stripe.ts
 import Stripe from "stripe";
 
+let _stripe: Stripe | null = null;
+
 export function getStripe() {
+  if (_stripe) return _stripe;
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("Missing STRIPE_SECRET_KEY");
-  return new Stripe(key);
+  _stripe = new Stripe(key); // ⚠️ sin apiVersion forzada
+  return _stripe;
 }
