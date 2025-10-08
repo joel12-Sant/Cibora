@@ -2,29 +2,34 @@
 import { withAuth } from "next-auth/middleware";
 import type { NextRequest } from "next/server";
 import type { Role } from "@prisma/client";
+import type { JWT } from "next-auth/jwt";
 
 export default withAuth({
   callbacks: {
     authorized: ({ token, req }) => {
       const pathname = (req as NextRequest).nextUrl.pathname;
 
-      // No autenticado: bloquea las rutas protegidas
+      // No autenticado: bloquea rutas protegidas
       if (!token) {
         if (pathname.startsWith("/orders/history")) return false;
         if (pathname.startsWith("/dashboard")) return false;
         return true; // resto público
       }
 
-      // Con token: aplica roles para /dashboard
-      const role = (token as any).role as Role | undefined;
+      // Extrae role del token con tipado (sin any)
+      const role = (token as JWT & { role?: Role }).role;
 
+      // /dashboard solo merchant o admin
       if (pathname.startsWith("/dashboard")) {
-        return role === "MERCHANT_OWNER" || role === "MERCHANT_STAFF" || role === "ADMIN";
+        return (
+          role === "MERCHANT_OWNER" ||
+          role === "MERCHANT_STAFF" ||
+          role === "ADMIN"
+        );
       }
 
-      if (pathname === "/orders/history") {
-        return true; // cualquier usuario autenticado
-      }
+      // /orders/history: cualquier autenticado
+      if (pathname === "/orders/history") return true;
 
       return true;
     },

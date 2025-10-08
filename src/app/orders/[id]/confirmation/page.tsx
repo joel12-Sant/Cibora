@@ -64,7 +64,7 @@ export default async function ConfirmationPage({ params }: Params) {
         </p>
       )}
 
-      {needsRefresh && <ClientStatusRefresher orderId={order.id} />}
+      {needsRefresh && <ClientStatusRefresher />}
     </main>
   );
 }

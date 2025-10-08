@@ -1,9 +1,10 @@
+// src/app/orders/[id]/confirmation/refresher.tsx
 "use client";
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export default function ClientStatusRefresher({ orderId }: { orderId: string }) {
+export default function ClientStatusRefresher() {
   const router = useRouter();
 
   useEffect(() => {
@@ -11,11 +12,11 @@ export default function ClientStatusRefresher({ orderId }: { orderId: string }) 
 
     const tick = () => {
       if (!active) return;
-      router.refresh(); // vuelve a renderizar el server component
+      router.refresh();
     };
 
-    const iv = setInterval(tick, 3000); // cada 3s
-    const to = setTimeout(() => clearInterval(iv), 30000); // 30s máximo
+    const iv = setInterval(tick, 3000);
+    const to = setTimeout(() => clearInterval(iv), 30000);
 
     return () => {
       active = false;
