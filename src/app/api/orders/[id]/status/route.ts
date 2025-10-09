@@ -1,89 +1,77 @@
-import { NextRequest, NextResponse } from "next/server";
-import { z } from "zod";
-import { Prisma, OrderStatus, Role } from "@prisma/client";
-import { prisma } from "@/lib/db";
-import { auth } from "@/lib/auth";
-
+// src/app/api/orders/[id]/status/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ALLOWED: Record<OrderStatus, OrderStatus[]> = {
-  CREATED: ["PREPARING", "CANCELED"],
-  PAID: ["PREPARING", "CANCELED"],
-  PREPARING: ["OUT_FOR_DELIVERY", "CANCELED"],
-  OUT_FOR_DELIVERY: ["DELIVERED"],
-  DELIVERED: [],
-  CANCELED: [],
-};
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { z } from "zod";
+import { OrderStatus, Role } from "@prisma/client";
+
+type Ctx = { params: Promise<{ id: string }> };
 
 const BodySchema = z.object({
   status: z.nativeEnum(OrderStatus),
 });
 
-// ⬇️ Firma compatible con Next 15 (params asíncronos)
-export async function PATCH(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  // ⬇️ Espera los params
-  const { id: orderId } = await context.params;
+const ALLOWED_ROLES: Role[] = ["MERCHANT_OWNER", "MERCHANT_STAFF", "ADMIN"] as const;
 
-  const json = await req.json().catch(() => ({}));
+function canTransition(from: OrderStatus, to: OrderStatus): boolean {
+  const flow: Record<OrderStatus, OrderStatus[]> = {
+    CREATED: ["PAID", "CANCELED"],
+    PAID: ["PREPARING", "CANCELED"],
+    PREPARING: ["OUT_FOR_DELIVERY", "CANCELED"],
+    OUT_FOR_DELIVERY: ["DELIVERED", "CANCELED"],
+    DELIVERED: [],
+    CANCELED: [],
+  };
+  return flow[from].includes(to);
+}
+
+export async function PATCH(req: NextRequest, { params }: Ctx) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+
+  const role = session.user.role;
+  if (!ALLOWED_ROLES.includes(role)) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  }
+
+  const { id } = await params;
+
+  const json = await req.json().catch(() => null);
   const parsed = BodySchema.safeParse(json);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Invalid payload", issues: parsed.error.flatten() },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
   }
-  const nextStatus = parsed.data.status;
+  const { status: nextStatus } = parsed.data;
 
-  const session = await auth();
-  const email = session?.user?.email ?? null;
-  const role: Role | undefined = session?.user?.role;
-  const userTenantId = session?.user?.tenantId ?? null;
-
-  if (!email || !role) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const isMerchant =
-    role === "MERCHANT_OWNER" || role === "MERCHANT_STAFF" || role === "ADMIN";
-  if (!isMerchant || !userTenantId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
+  // Trae la orden con su tenant
   const order = await prisma.order.findUnique({
-    where: { id: orderId },
+    where: { id },
     select: { id: true, status: true, tenantId: true },
   });
-  if (!order) return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
-  if (order.tenantId !== userTenantId) {
-    return NextResponse.json({ error: "Forbidden (tenant mismatch)" }, { status: 403 });
+  // Merchant debe ser del mismo tenant (admin puede todo)
+  if (role !== "ADMIN") {
+    if (!session.user.tenantId || session.user.tenantId !== order.tenantId) {
+      return NextResponse.json({ error: "Tenant inválido" }, { status: 403 });
+    }
   }
 
-  const allowed = ALLOWED[order.status];
-  if (!allowed.includes(nextStatus)) {
+  if (!canTransition(order.status, nextStatus)) {
     return NextResponse.json(
-      { error: `Invalid transition ${order.status} -> ${nextStatus}` },
-      { status: 400 }
+      { error: `Transición inválida: ${order.status} → ${nextStatus}` },
+      { status: 400 },
     );
   }
 
-  try {
-    const updated = await prisma.$transaction(async (tx) => {
-      const u = await tx.order.update({
-        where: { id: order.id },
-        data: { status: nextStatus },
-        select: { id: true, status: true },
-      });
-      return u;
-    });
+  const updated = await prisma.order.update({
+    where: { id: order.id },
+    data: { status: nextStatus },
+    select: { id: true, status: true },
+  });
 
-    return NextResponse.json({ order: updated }, { status: 200 });
-  } catch (err: unknown) {
-    const e = err as Prisma.PrismaClientKnownRequestError;
-    console.error("order status patch error:", e);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
+  return NextResponse.json({ order: updated });
 }
