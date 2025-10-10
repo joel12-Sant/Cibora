@@ -1,3 +1,4 @@
+// src/app/cart/CartHydrator.tsx
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -13,9 +14,9 @@ import type { CartResponse } from "@/lib/cart-types";
  *  - si hay items locales, intenta /api/cart/detect-tenant para deducir tenant y hace MERGE
  * Nunca borra items locales si el server devuelve 0 o falla.
  *
- * IMPORTANTE: Upsert en el store:
- *  - si el item NO existe en Zustand -> add({ id, name, price }, qty)
- *  - si ya existe -> setQty(id, qty)
+ * UPSERT en store:
+ *  - si no existe -> add({ id, name, price }, qty)
+ *  - si existe -> setQty(id, qty)
  */
 export default function CartHydrator() {
   const { status } = useSession();
@@ -26,7 +27,6 @@ export default function CartHydrator() {
 
   const mergedTenantsRef = useRef<Set<string>>(new Set());
 
-  // util: inserta o actualiza el item en el store
   function upsertFromServer(server: { menuItemId: string; name: string; price: number; qty: number }) {
     const exists = items.some((it) => it.id === server.menuItemId);
     if (exists) {
@@ -123,7 +123,6 @@ export default function CartHydrator() {
     return () => {
       cancelled = true;
     };
-    // Dependemos de status y de la referencia a los handlers (add/setQty) y lista actual (items)
   }, [status, items, add, setQty]);
 
   return null;

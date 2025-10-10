@@ -11,6 +11,7 @@ import { cartResponseSchema, mergeSchema } from "@/lib/cart-types";
  *  - Si ya existe item en BD => qty_final = MAX(qty_server, qty_local)
  *  - Si no existe => se crea con qty_local
  *  - Snapshot name/price se actualiza con el MenuItem actual
+ * Devuelve { items: [{ menuItemId, name, price, qty }] }
  */
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -52,13 +53,15 @@ export async function POST(req: NextRequest) {
 
     const prev = existsMap.get(i.menuItemId);
     if (prev) {
-      const finalQty = Math.max(prev.qty, i.qty); // 👈 idempotente
+      // 👇 IDEMPOTENTE: evita inflar cantidades si llamas merge varias veces
+      const finalQty = Math.max(prev.qty, i.qty);
       if (finalQty !== prev.qty) {
         await prisma.cartItem.update({
           where: { id: prev.id },
           data: { qty: finalQty, name: mi.name, price: mi.price },
         });
       } else {
+        // refresca snapshot por si cambió name/price
         await prisma.cartItem.update({
           where: { id: prev.id },
           data: { name: mi.name, price: mi.price },

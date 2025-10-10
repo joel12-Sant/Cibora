@@ -23,7 +23,7 @@ const deleteSchema = z.object({
   menuItemId: z.string().min(1),
 });
 
-// Crea/actualiza (UP-SERT) 1 item
+// Crea/actualiza (UP-SERT) 1 item con QTY EXACTA (no suma)
 export async function POST(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     create: { userId, tenantId, status: "ACTIVE" },
   });
 
-  // Snapshot de MenuItem (si existe y activo)
+  // Snapshot del MenuItem
   const mi = await prisma.menuItem.findFirst({
     where: { id: item.menuItemId, active: true, menu: { tenantId } },
     select: { id: true, name: true, price: true },
@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (existing) {
+    // 👇 SET exacto (no sumamos)
     await prisma.cartItem.update({
       where: { id: existing.id },
       data: { qty: item.qty, name: mi.name, price: mi.price },

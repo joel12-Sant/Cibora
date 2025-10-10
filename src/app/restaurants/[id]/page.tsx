@@ -1,10 +1,12 @@
 import Link from "next/link";
 import AddToCartButton from "@/components/cart/AddToCartButton";
+import SetTenantLocal from "@/components/tenant/SetTenantLocal";
+import { formatMXN } from "@/lib/money";
 
 type MenuItem = {
   id: string;
   name: string;
-  price: number;
+  price: number;  
   active: boolean;
 };
 
@@ -33,6 +35,9 @@ export default async function Page({
 
   return (
     <main className="mx-auto max-w-3xl p-6 space-y-6">
+      {/* Fija el tenantId local al entrar a este restaurante */}
+      <SetTenantLocal tenantId={id} />
+
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Menú</h1>
         <Link href="/cart" className="underline">
@@ -48,10 +53,10 @@ export default async function Page({
             <li key={it.id} className="flex items-center justify-between p-3">
               <div>
                 <p className="font-medium">{it.name}</p>
-                <p className="text-sm opacity-70">${it.price}.00 MXN</p>
+                <p className="text-sm opacity-70">{formatMXN(it.price)} c/u</p>
               </div>
               <AddToCartButton
-                tenantId={id}         // 👈 ahora pasamos el tenantId
+                tenantId={id}     // 👈 tenant actual
                 id={it.id}
                 name={it.name}
                 price={it.price}
