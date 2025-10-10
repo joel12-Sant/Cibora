@@ -1,4 +1,3 @@
-// app/orders/[id]/confirmation/page.tsx
 import { prisma } from "@/lib/db";
 import { OrderStatus } from "@prisma/client";
 import StatusBadge from "@/components/StatusBadge";

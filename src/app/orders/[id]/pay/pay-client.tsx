@@ -7,7 +7,6 @@ import { useCallback, useMemo, useState } from "react";
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
 export default function PayClient({ clientSecret, orderId }: { clientSecret: string; orderId: string }) {
-  // ⚠️ mueve appearance adentro del useMemo para que no sea dependencia cambiante
   const options = useMemo(
     () => ({
       clientSecret,
@@ -39,7 +38,6 @@ function CheckoutForm({ orderId }: { orderId: string }) {
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        // redirige al confirmar (stripe puede necesitar redirección 3DS)
         return_url: `${window.location.origin}/orders/${orderId}/confirmation`,
       },
       redirect: "if_required",
@@ -48,12 +46,10 @@ function CheckoutForm({ orderId }: { orderId: string }) {
     setSubmitting(false);
 
     if (error) {
-      // Mostrar mensaje claro en UI
       setMsg(error.message ?? "No se pudo procesar el pago.");
       return;
     }
 
-    // Si no hubo redirect y no hay error, navegamos manualmente
     window.location.assign(`/orders/${orderId}/confirmation`);
   }, [stripe, elements, orderId]);
 

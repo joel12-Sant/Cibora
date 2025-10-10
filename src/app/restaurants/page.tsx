@@ -11,7 +11,7 @@ async function getRestaurants(): Promise<Restaurant[]> {
     throw new Error("Error al cargar restaurantes");
   }
   const json = await res.json();
-  return json.data as Restaurant[]; // ajusta si tu API devuelve otro shape (p.ej. json)
+  return json.data as Restaurant[];
 }
 
 export default async function RestaurantsPage() {
@@ -21,7 +21,6 @@ export default async function RestaurantsPage() {
     <main className="space-y-6 p-6 mx-auto max-w-3xl">
       <header className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Restaurantes</h2>
-        {/* El carrito ya no necesita tenantId */}
         <Link href="/cart" className="underline">
           Ver carrito
         </Link>

@@ -1,15 +1,13 @@
 import Link from "next/link";
 import { AddToCartButton } from "@/features/cart/AddToCartBuntton";
 
-// estructura mínima de item
 type MenuItem = {
   id: string;
   name: string;
-  price: number; // MXN
+  price: number;
   active: boolean;
 };
 
-// Carga del menú del restaurante (server-side)
 async function getMenu(restaurantId: string): Promise<MenuItem[]> {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
   const url = `${base}/api/restaurants/${restaurantId}/menu`;
@@ -17,7 +15,6 @@ async function getMenu(restaurantId: string): Promise<MenuItem[]> {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`Error al cargar menú (${res.status})`);
 
-  // Asegúrate que tu API devuelva { items: [...] }
   const json = await res.json();
   const items =
     (Array.isArray(json?.items) && json.items) ||
@@ -26,7 +23,6 @@ async function getMenu(restaurantId: string): Promise<MenuItem[]> {
   return items as MenuItem[];
 }
 
-// 👇 Next 15: params es Promise<{ id: string }>
 export default async function Page({
   params,
 }: {

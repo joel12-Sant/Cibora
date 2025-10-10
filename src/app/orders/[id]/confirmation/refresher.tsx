@@ -1,4 +1,3 @@
-// src/app/orders/[id]/confirmation/refresher.tsx
 "use client";
 
 import { useEffect } from "react";
