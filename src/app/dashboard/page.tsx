@@ -3,8 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import Link from "next/link";
 import { Role, OrderStatus } from "@prisma/client";
-import ItemsTable from "@/app/dashboard/ItemsTable";
 import { formatMXN } from "@/lib/money";
+import ItemsTable from "@/app/dashboard/ItemsTable";
 
 type SearchParamsPromise = Promise<Record<string, string | string[] | undefined>>;
 type Props = { searchParams?: SearchParamsPromise };
@@ -27,7 +27,6 @@ export default async function DashboardPage({ searchParams }: Props) {
     );
   }
 
-  // ✅ Next 15: searchParams viene como Promise y puede traer arrays
   const spRaw =
     (await (searchParams ??
       Promise.resolve({} as Record<string, string | string[] | undefined>))) ?? {};
@@ -40,7 +39,7 @@ export default async function DashboardPage({ searchParams }: Props) {
     ...(statusFilter ? { status: statusFilter } : {}),
   };
 
-  // Contadores por estado (para los chips)
+  // Contadores por estado
   const counts = await prisma.order.groupBy({
     by: ["status"],
     where: { tenantId: user.tenantId },
@@ -50,9 +49,7 @@ export default async function DashboardPage({ searchParams }: Props) {
   const countByStatus = new Map<OrderStatus, number>(
     Object.values(OrderStatus).map((s) => [s, 0]),
   );
-  for (const row of counts) {
-    countByStatus.set(row.status, row._count._all);
-  }
+  for (const row of counts) countByStatus.set(row.status, row._count._all);
   const totalAll = Array.from(countByStatus.values()).reduce((a, b) => a + b, 0);
 
   const [orders, items] = await Promise.all([
@@ -77,11 +74,22 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   const makeHref = (s?: OrderStatus) => (s ? `/dashboard?status=${s}` : "/dashboard");
 
+  // ⬇️ NUEVO: helpers para enlaces de exportación
+  const now = new Date();
+  const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const toISODate = (d: Date) => d.toISOString().slice(0, 10); // YYYY-MM-DD
+
+  const baseExport = "/api/orders/export";
+  const exportAllHref = statusFilter ? `${baseExport}?status=${statusFilter}` : baseExport;
+  const export30Href = statusFilter
+    ? `${baseExport}?status=${statusFilter}&from=${toISODate(d30)}&to=${toISODate(now)}`
+    : `${baseExport}?from=${toISODate(d30)}&to=${toISODate(now)}`;
+
   return (
     <main className="mx-auto max-w-4xl p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Panel del restaurante</h1>
 
-      {/* Chips de conteo por estado */}
+      {/* Chips de conteo */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Chip href={makeHref()} active={!statusFilter} label={`Todos`} count={totalAll} />
         {Object.values(OrderStatus).map((s) => (
@@ -95,6 +103,22 @@ export default async function DashboardPage({ searchParams }: Props) {
         ))}
       </div>
 
+      {/* ⬇️ NUEVO: acciones de exportación */}
+      <div className="flex flex-wrap gap-2 text-sm">
+        <a
+          href={exportAllHref}
+          className="inline-flex items-center gap-2 rounded-md border px-3 py-1 underline"
+        >
+          Exportar CSV (todos {statusFilter ? `- ${statusFilter}` : ""})
+        </a>
+        <a
+          href={export30Href}
+          className="inline-flex items-center gap-2 rounded-md border px-3 py-1 underline"
+        >
+          Exportar CSV (últimos 30 días{statusFilter ? ` - ${statusFilter}` : ""})
+        </a>
+      </div>
+
       <section>
         <h2 className="mb-2 font-medium">Pedidos recientes</h2>
         <ul className="divide-y rounded-xl border">
@@ -106,9 +130,7 @@ export default async function DashboardPage({ searchParams }: Props) {
                   {o.status} • {formatMXN(o.total)} • {new Date(o.createdAt).toLocaleString()}
                 </p>
               </div>
-
               <div className="flex items-center gap-3">
-                {/* Control de estado (cliente) */}
                 <OrderStatusActions orderId={o.id} initialStatus={o.status} />
                 <Link className="text-sm underline" href={`/dashboard/orders/${o.id}`}>
                   Gestionar
@@ -131,7 +153,6 @@ export default async function DashboardPage({ searchParams }: Props) {
   );
 }
 
-/** Chip de estado (server-safe: solo usa props primitivas) */
 function Chip(props: { href: string; active: boolean; label: string; count: number }) {
   const base = "inline-flex items-center gap-2 rounded-full border px-3 py-1";
   const act = props.active ? "bg-black text-white border-black" : "bg-white text-black";
@@ -143,5 +164,4 @@ function Chip(props: { href: string; active: boolean; label: string; count: numb
   );
 }
 
-// Importa el componente client (con "use client" adentro)
 import OrderStatusActions from "@/components/orders/OrderStatusActions";
