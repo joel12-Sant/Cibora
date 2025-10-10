@@ -5,49 +5,71 @@ import { useEffect, useMemo, useState } from "react";
 import { useCart } from "@/features/cart/cart-store";
 import { formatMXN } from "@/lib/money";
 
+// ----------- Helpers de tipado seguros -----------
+type StringDict = Record<string, unknown>;
+
+function isRecord(value: unknown): value is StringDict {
+  return typeof value === "object" && value !== null;
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === "string");
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "Error desconocido";
+  }
+}
+
+function getNestedErrors(obj: unknown, keys: string[]): string[] | null {
+  let current: unknown = obj;
+  for (const k of keys) {
+    if (!isRecord(current)) return null;
+    current = current[k];
+  }
+  if (isRecord(current) && "_errors" in current && isStringArray((current as StringDict)["_errors"])) {
+    return (current as { _errors: string[] })._errors;
+  }
+  return null;
+}
+
 /** Convierte posibles respuestas de error (incluido ZodError) a un string seguro */
 function normalizeErrorMessage(data: unknown, fallback = "No se pudo crear la orden."): string {
   if (typeof data === "string") return data;
 
-  if (data && typeof data === "object") {
-    const obj = data as Record<string, unknown>;
+  if (isRecord(data)) {
+    // { error: "..." }
+    if (typeof data.error === "string") return String(data.error);
 
-    // Convención común: { error: "..." } o { error: { _errors:[...] } }
-    const err = obj.error;
-    if (typeof err === "string") return err;
-    if (err && typeof err === "object") {
-      const rootErrors = (err as { _errors?: unknown })._errors;
-      if (Array.isArray(rootErrors) && rootErrors.length > 0) {
-        return rootErrors.filter((x) => typeof x === "string").join(", ");
-      }
+    // { error: { _errors: [...] } }
+    if (isRecord(data.error) && isStringArray((data.error as StringDict)["_errors"])) {
+      return ((data.error as { _errors: string[] })._errors).join(", ");
     }
 
     // ZodError formateado: { _errors:[], items:{ _errors:[], 0:{id:{_errors:["..."]}} } }
-    const rootErrors = (obj as { _errors?: unknown })._errors;
-    if (Array.isArray(rootErrors) && rootErrors.length > 0) {
-      return rootErrors.filter((x) => typeof x === "string").join(", ");
-    }
-    const items = (obj as { items?: any }).items;
-    if (items && typeof items === "object") {
-      const ie = (items as { _errors?: unknown })._errors;
-      if (Array.isArray(ie) && ie.length > 0) {
-        return ie.filter((x) => typeof x === "string").join(", ");
-      }
-      // Busca errores anidados comunes: items.0.id._errors
-      for (const k of Object.keys(items)) {
-        const maybe = (items as any)[k];
-        if (maybe && typeof maybe === "object" && maybe.id && Array.isArray(maybe.id._errors)) {
-          const msgs = maybe.id._errors.filter((x: unknown) => typeof x === "string");
-          if (msgs.length) return msgs.join(", ");
-        }
-      }
+    if ("_errors" in data && isStringArray((data as StringDict)["_errors"])) {
+      return ((data as { _errors: string[] })._errors).join(", ");
     }
 
-    try {
-      return JSON.stringify(data);
-    } catch {
-      // ignore
+    // items._errors o items.0.id._errors
+    const items = (data as StringDict)["items"];
+    if (isRecord(items)) {
+      if ("_errors" in items && isStringArray((items as StringDict)["_errors"])) {
+        return ((items as { _errors: string[] })._errors).join(", ");
+      }
+      // Busca un par de rutas comunes
+      const nested =
+        getNestedErrors(items, ["0", "id"]) ??
+        getNestedErrors(items, ["1", "id"]) ??
+        getNestedErrors(items, ["id"]); // fallback
+      if (nested && nested.length > 0) return nested.join(", ");
     }
+
+    // Último recurso: stringify
+    return safeStringify(data);
   }
 
   return fallback;
@@ -132,7 +154,7 @@ export default function CartPage() {
             setCreating(true);
             setMsg(null);
             try {
-              // 👇 Tu API espera { items: [{ id, qty }] }
+              // Tu API espera { items: [{ id, qty }] }
               const payload = { items: items.map((it) => ({ id: it.id, qty: it.qty })) };
 
               const res = await fetch("/api/orders", {
@@ -156,26 +178,24 @@ export default function CartPage() {
 
               // Acepta {orderId} | {id} | {order:{id}}
               let orderId: string | null = null;
-              if (data && typeof data === "object") {
-                const obj = data as Record<string, unknown>;
-                if (typeof obj.orderId === "string") orderId = obj.orderId;
-                else if (typeof obj.id === "string") orderId = obj.id;
-                else if (
-                  obj.order &&
-                  typeof (obj.order as { id?: unknown }).id === "string"
-                ) {
-                  orderId = (obj.order as { id: string }).id;
+              if (isRecord(data)) {
+                if (typeof data.orderId === "string") {
+                  orderId = data.orderId;
+                } else if (typeof data.id === "string") {
+                  orderId = data.id;
+                } else if (isRecord(data.order) && typeof data.order.id === "string") {
+                  orderId = data.order.id;
                 }
               }
 
               if (!orderId) {
+                // mensaje legible + log
                 console.warn("Respuesta inesperada de /api/orders:", data);
                 setMsg("La respuesta no incluyó un orderId.");
                 setCreating(false);
                 return;
               }
 
-              // Redirige al flujo de pago
               window.location.href = `/orders/${orderId}/pay`;
             } catch {
               setMsg("No se pudo iniciar el pago.");

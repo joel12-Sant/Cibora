@@ -1,69 +1,83 @@
+// src/components/cart/CheckoutFromCartButton.tsx
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useCart } from "@/features/cart/cart-store";
 
-type ApiResponse =
-  | { orderId: string }
-  | { error: string };
+type Props = {
+  className?: string;
+};
 
-export default function CheckoutFromCartButton() {
-  const router = useRouter();
+export default function CheckoutFromCartButton({ className }: Props) {
   const items = useCart((s) => s.items);
-  const clear = useCart((s) => s.clear);
-  const [loading, setLoading] = useState(false);
+  // const clear = useCart((s) => s.clear); // úsalo si quieres vaciar después
+  const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const disabled = loading || items.length === 0;
-
-  async function handleCheckout() {
-    if (disabled) return;
-    setLoading(true);
+  async function handleClick() {
+    if (creating || items.length === 0) return;
+    setCreating(true);
     setMsg(null);
     try {
-      // Mapeamos el carrito al formato que suele esperar tu API:
-      // items: [{ itemId, qty }]
-      const payload = {
-        items: items.map(it => ({ itemId: it.id, qty: it.qty })),
-      };
-
+      const payload = { items: items.map((it) => ({ id: it.id, qty: it.qty })) };
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      const data = (await res.json()) as ApiResponse;
+      let data: unknown = null;
+      try {
+        data = await res.json();
+      } catch {
+        // ignore
+      }
 
-      if (!res.ok || !("orderId" in data)) {
-        setMsg(("error" in data && data.error) ? data.error : "No se pudo crear la orden.");
-        setLoading(false);
+      if (!res.ok) {
+        const message =
+          typeof data === "string"
+            ? data
+            : (data && typeof data === "object" && "error" in data && typeof (data as { error: unknown }).error === "string"
+                ? (data as { error: string }).error
+                : "No se pudo crear la orden.");
+        setMsg(message);
+        setCreating(false);
         return;
       }
 
-      // (Opcional) limpiar el carrito aquí o hasta que llegue a la confirmación
-      // clear();
+      let orderId: string | null = null;
+      if (data && typeof data === "object") {
+        const obj = data as Record<string, unknown>;
+        if (typeof obj.orderId === "string") orderId = obj.orderId as string;
+        else if (typeof obj.id === "string") orderId = obj.id as string;
+        else if (obj.order && typeof (obj.order as { id?: unknown }).id === "string") {
+          orderId = (obj.order as { id: string }).id;
+        }
+      }
 
-      router.push(`/orders/${data.orderId}/pay`);
-    } catch (e) {
+      if (!orderId) {
+        setMsg("La respuesta no incluyó un orderId.");
+        setCreating(false);
+        return;
+      }
+
+      window.location.href = `/orders/${orderId}/pay`;
+    } catch {
       setMsg("No se pudo iniciar el pago.");
-      setLoading(false);
+      setCreating(false);
     }
   }
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      {msg && <p className="text-sm text-red-600">{msg}</p>}
-      <button
-        type="button"
-        onClick={handleCheckout}
-        disabled={disabled}
-        className="rounded-md border px-3 py-1 text-sm underline disabled:opacity-50"
-        aria-disabled={disabled}
-      >
-        {loading ? "Creando orden…" : "Continuar al pago"}
-      </button>
-    </div>
+    <button
+      type="button"
+      className={className ?? "rounded-md border px-3 py-1 text-sm underline disabled:opacity-50"}
+      disabled={creating || items.length === 0}
+      onClick={handleClick}
+      aria-label="Continuar al pago"
+    >
+      {creating ? "Creando orden…" : "Continuar al pago"}
+      {msg && <span className="ml-2 text-red-600 text-xs">{msg}</span>}
+    </button>
   );
 }
