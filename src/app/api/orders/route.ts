@@ -1,119 +1,101 @@
 // src/app/api/orders/route.ts
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { Role } from "@prisma/client";
-import crypto from "node:crypto";
+import { CartStatus, OrderStatus } from "@prisma/client";
 
-const CreateOrderSchema = z.object({
+/**
+ * Crea una orden a partir de items del carrito local (o UI).
+ * Reglas:
+ *  - Requiere sesión (asocia la orden al usuario).
+ *  - Verifica que todos los ítems existen, están activos y pertenecen al MISMO tenant.
+ *  - Calcula total usando los precios actuales (snapshot).
+ *  - Crea Order + OrderItems.
+ *  - Si hay Cart.ACTIVE del usuario para ese tenant => lo marca como CONVERTED.
+ *  - Respuesta: { id: string }
+ */
+
+const createOrderSchema = z.object({
   items: z
     .array(
       z.object({
-        id: z.string().min(1, "id requerido"),
+        id: z.string().min(1, "id requerido"), // menuItemId
         qty: z.number().int().positive("qty debe ser > 0"),
       })
     )
     .min(1, "Debes incluir al menos 1 ítem"),
 });
 
-export async function POST(req: Request) {
-  try {
-    const body = await req.json().catch(() => null);
-    const parsed = CreateOrderSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-    }
+type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
-    const { items } = parsed.data;
-    const ids = items.map((i) => i.id);
+export async function POST(req: NextRequest) {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) {
+    return NextResponse.json({ error: "auth_required" }, { status: 401 });
+  }
 
-    // Trae los MenuItem desde DB con el tenant del menú
-    const dbItems = await prisma.menuItem.findMany({
-      where: { id: { in: ids }, active: true },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        menu: { select: { tenantId: true } },
-      },
-    });
+  // Parse/validación del body
+  const body: unknown = await req.json().catch(() => null);
+  const parsed = createOrderSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
+  }
+  const { items } = parsed.data as CreateOrderInput;
 
-    if (dbItems.length !== ids.length) {
-      return NextResponse.json(
-        { error: "Algunos artículos no existen o no están activos." },
-        { status: 400 }
-      );
-    }
+  // Traer todos los MenuItems involucrados con su tenant
+  const menuItems = await prisma.menuItem.findMany({
+    where: { id: { in: items.map((i) => i.id) }, active: true },
+    select: { id: true, name: true, price: true, menu: { select: { tenantId: true } } },
+  });
 
-    // Verifica que todos pertenezcan al mismo tenant
-    const tenantId = dbItems[0].menu.tenantId;
-    const mixedTenant = dbItems.some((mi) => mi.menu.tenantId !== tenantId);
-    if (mixedTenant) {
-      return NextResponse.json(
-        { error: "Todos los artículos deben pertenecer al mismo restaurante." },
-        { status: 400 }
-      );
-    }
+  if (menuItems.length !== items.length) {
+    return NextResponse.json({ error: "Algunos ítems no existen o no están activos." }, { status: 400 });
+  }
 
-    // Crea un map rápido por id para lookup de precio/nombre
-    const map = new Map(dbItems.map((mi) => [mi.id, mi]));
-    const orderItemsData = items.map((i) => {
-      const dbi = map.get(i.id)!;
-      return {
-        itemId: dbi.id,
-        name: dbi.name,
-        price: dbi.price,
-        qty: i.qty,
-      };
-    });
+  // Validar que todos pertenecen al mismo tenant
+  const tenantId = menuItems[0].menu.tenantId;
+  const uniqueTenants = new Set(menuItems.map((m) => m.menu.tenantId));
+  if (uniqueTenants.size !== 1) {
+    return NextResponse.json({ error: "Todos los ítems deben pertenecer al mismo restaurante." }, { status: 400 });
+  }
 
-    const total = orderItemsData.reduce((acc, it) => acc + it.price * it.qty, 0);
+  // Construir snapshot y total
+  const byId = new Map(menuItems.map((m) => [m.id, m]));
+  let total = 0;
+  const orderItemsData = items.map((i) => {
+    const mi = byId.get(i.id)!;
+    total += mi.price * i.qty;
+    return {
+      itemId: mi.id,
+      name: mi.name,
+      price: mi.price,
+      qty: i.qty,
+    };
+  });
 
-    // Usuario (sesión o guest)
-    const session = await auth().catch(() => null);
-    let userId: string;
-
-    if (session?.user?.id) {
-      userId = session.user.id;
-    } else {
-      // Usuario invitado efímero (para no romper el schema, tu modelo requiere userId)
-      const guestEmail = `guest+${crypto.randomUUID()}@guest.local`;
-      const guest = await prisma.user.create({
-        data: {
-          email: guestEmail,
-          role: Role.CUSTOMER,
-          tenantId: null,
-          name: "Guest",
-        },
-        select: { id: true },
-      });
-      userId = guest.id;
-    }
-
-    // Crea la orden + items
-    const order = await prisma.order.create({
+  // Crear la orden + items en transacción
+  const order = await prisma.$transaction(async (tx) => {
+    const created = await tx.order.create({
       data: {
         tenantId,
         userId,
-        status: "CREATED",
+        status: OrderStatus.CREATED,
         total,
-        items: {
-          createMany: {
-            data: orderItemsData,
-          },
-        },
+        items: { create: orderItemsData },
       },
       select: { id: true },
     });
 
-    // Estándar: siempre { orderId }
-    return NextResponse.json({ orderId: order.id }, { status: 200 });
-  } catch (err) {
-    console.error("POST /api/orders error:", err);
-    return NextResponse.json({ error: "order_create_failed" }, { status: 500 });
-  }
+    // Marcar carrito activo como CONVERTED (si existe)
+    await tx.cart.updateMany({
+      where: { userId, tenantId, status: CartStatus.ACTIVE },
+      data: { status: CartStatus.CONVERTED },
+    });
+
+    return created;
+  });
+
+  return NextResponse.json({ id: order.id }, { status: 200 });
 }

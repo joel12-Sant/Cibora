@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCart } from "@/features/cart/cart-store";
 import { formatMXN } from "@/lib/money";
+import CartHydrator from "./CartHydrator";
 
 // ----------- Helpers de tipado seguros -----------
 type StringDict = Record<string, unknown>;
@@ -60,11 +61,10 @@ function normalizeErrorMessage(data: unknown, fallback = "No se pudo crear la or
       if ("_errors" in items && isStringArray((items as StringDict)["_errors"])) {
         return ((items as { _errors: string[] })._errors).join(", ");
       }
-      // Busca un par de rutas comunes
       const nested =
         getNestedErrors(items, ["0", "id"]) ??
         getNestedErrors(items, ["1", "id"]) ??
-        getNestedErrors(items, ["id"]); // fallback
+        getNestedErrors(items, ["id"]);
       if (nested && nested.length > 0) return nested.join(", ");
     }
 
@@ -104,6 +104,9 @@ export default function CartPage() {
 
   return (
     <main className="mx-auto max-w-3xl p-6 space-y-6">
+      {/* Hidrata/merge automático contra servidor si hay sesión */}
+      <CartHydrator />
+
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Carrito</h1>
         {/* {items.length > 0 && (
@@ -190,6 +193,7 @@ export default function CartPage() {
 
               if (!orderId) {
                 // mensaje legible + log
+                // eslint-disable-next-line no-console
                 console.warn("Respuesta inesperada de /api/orders:", data);
                 setMsg("La respuesta no incluyó un orderId.");
                 setCreating(false);
