@@ -2,21 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useCart } from "@/features/cart/cart-store";
 
-// ⬇️ Ajusta este import al de tu proyecto:
-import { useCartStore } from "@/stores/cart";
-
-/** Calcula el total de unidades en el carrito */
 function useCartCount(): number {
-  // ⬇️ Ajusta este selector a tu shape de estado
-  // Ejemplo esperado: state.items: Array<{ qty: number }>
-  const items = useCartStore((s) => s.items);
+  const items = useCart((s) => s.items);
   return Array.isArray(items) ? items.reduce((acc, it) => acc + (it.qty ?? 0), 0) : 0;
 }
 
 export default function CartBadge() {
   const count = useCartCount();
-  // Evita hidration mismatch si tu store inicializa en cliente
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
   if (!ready || count <= 0) return null;

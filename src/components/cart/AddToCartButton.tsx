@@ -1,18 +1,17 @@
 "use client";
 
 import { useState } from "react";
-// Asegúrate que esta ruta sea EXACTAMENTE la misma que usa CartBadge
-import { useCartStore } from "@/stores/cart";
+import { useCart } from "@/features/cart/cart-store";
 
 type Props = {
   id: string;
   name: string;
-  price: number; // en pesos enteros (ej: 120 = $120.00)
+  price: number; // MXN (enteros)
   qty?: number;
 };
 
 export default function AddToCartButton({ id, name, price, qty = 1 }: Props) {
-  const add = useCartStore((s) => s.add);
+  const add = useCart((s) => s.add);
   const [loading, setLoading] = useState(false);
 
   return (
@@ -22,8 +21,7 @@ export default function AddToCartButton({ id, name, price, qty = 1 }: Props) {
       disabled={loading}
       onClick={() => {
         setLoading(true);
-        add({ id, name, price, qty });
-        // pequeño delay visual opcional
+        add({ id, name, price }, qty);
         setTimeout(() => setLoading(false), 120);
       }}
     >

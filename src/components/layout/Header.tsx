@@ -1,7 +1,7 @@
 // src/components/layout/Header.tsx
 import Link from "next/link";
 import { auth } from "@/lib/auth";
-import CartBadge from "@/components/CarrtBadge";
+import CartBadge from "@/components/cart/CartBadge";
 import type { Role } from "@prisma/client";
 
 function isMerchant(role: Role | undefined | null): boolean {
