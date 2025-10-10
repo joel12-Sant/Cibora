@@ -1,3 +1,4 @@
+import "./globals.css"; 
 import Link from "next/link";
 import Providers from "./providers";
 import AuthButton from "@/components/auth-buttons";
