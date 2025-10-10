@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { AddToCartButton } from "@/features/cart/AddToCartBuntton";
+//import { AddToCartButton } from "@/features/cart/AddToCartBuntton";
+import AddToCartButton from "@/components/cart/AddToCartButton";
 
 type MenuItem = {
   id: string;
@@ -45,18 +46,15 @@ export default async function Page({
         <p className="opacity-70">Este restaurante aún no tiene items.</p>
       ) : (
         <ul className="divide-y rounded-xl border">
-          {menu.map((item) => (
-            <li key={item.id} className="flex items-center justify-between p-4">
-              <div>
-                <p className="font-medium">{item.name}</p>
-                <p className="text-sm opacity-70">${item.price} MXN</p>
-                {!item.active && (
-                  <span className="text-xs text-red-500">No disponible</span>
-                )}
-              </div>
-              <AddToCartButton id={item.id} name={item.name} price={item.price} />
-            </li>
-          ))}
+          {menu.map((it) => (
+  <li key={it.id} className="flex items-center justify-between p-3">
+    <div>
+      <p className="font-medium">{it.name}</p>
+      <p className="text-sm opacity-70">${it.price}.00 MXN</p>
+    </div>
+    <AddToCartButton id={it.id} name={it.name} price={it.price} />
+  </li>
+))}
         </ul>
       )}
     </main>

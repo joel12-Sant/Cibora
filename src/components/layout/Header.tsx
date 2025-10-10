@@ -1,6 +1,7 @@
 // src/components/layout/Header.tsx
 import Link from "next/link";
 import { auth } from "@/lib/auth";
+import CartBadge from "@/components/CarrtBadge";
 import type { Role } from "@prisma/client";
 
 function isMerchant(role: Role | undefined | null): boolean {
@@ -22,6 +23,8 @@ export default async function Header() {
 
           {user && <Link href="/orders/history">Mis pedidos</Link>}
           {isMerchant(user?.role) && <Link href="/dashboard">Dashboard</Link>}
+
+          <CartBadge /> {/* ⬅️ aquí va el badge */}
 
           {user ? (
             <form action="/api/auth/signout" method="post">
