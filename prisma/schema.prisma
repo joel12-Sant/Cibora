@@ -12,7 +12,7 @@ model User {
   email        String  @unique
   name         String?
   image        String?
-  passwordHash String? // 👈 renombrado
+  passwordHash String?
 
   role     Role    @default(CUSTOMER)
   tenantId String?
@@ -21,6 +21,7 @@ model User {
   accounts Account[]
   sessions Session[]
   orders   Order[]
+  carts    Cart[]   // 👈 NUEVO: carritos asociados al usuario
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -59,7 +60,12 @@ model Tenant {
   users     User[]
   menus     Menu[]
   orders    Order[]
+  carts     Cart[]       // 👈 NUEVO: carritos por tenant
   createdAt DateTime     @default(now())
+
+  // 👇 NUEVOS (opcionales)
+  imageUrl    String?
+  description String?
 }
 
 model VerificationToken {
@@ -85,6 +91,10 @@ model MenuItem {
   name   String
   price  Int
   active Boolean @default(true)
+
+  // 👇 NUEVOS (opcionales)
+  imageUrl    String?
+  description String?
 }
 
 model Order {
@@ -96,7 +106,7 @@ model Order {
   status    OrderStatus @default(CREATED)
   total     Int         @default(0)
   items     OrderItem[]
-  payments  Payment[] // <-- contraparte de Payment.order
+  payments  Payment[]   // contraparte de Payment.order
   createdAt DateTime    @default(now())
 }
 
@@ -121,6 +131,40 @@ model Payment {
   createdAt DateTime @default(now())
 }
 
+// 👇👇👇 NUEVOS MODELOS PARA CARRITO PERSISTENTE
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tenantId  String
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  status    CartStatus @default(ACTIVE)
+
+  items     CartItem[]
+
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @default(now()) @updatedAt
+
+  /// Evita múltiples carritos activos del mismo user en el mismo tenant
+  @@unique([userId, tenantId, status])
+}
+
+model CartItem {
+  id         String   @id @default(uuid())
+  cartId     String
+  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  menuItemId String
+  // Snapshots para que el carrito no cambie si el menú cambia
+  name       String
+  price      Int
+  qty        Int
+
+  createdAt  DateTime @default(now())
+}
+
 enum Role {
   ADMIN
   MERCHANT_OWNER
@@ -142,4 +186,10 @@ enum TenantStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum CartStatus {
+  ACTIVE
+  ABANDONED
+  CONVERTED
 }
