@@ -1,52 +1,62 @@
 // src/app/api/cart/items/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import {
-  removeItemSchema,
-  setQtySchema,
-  upsertItemSchema,
-  cartResponseSchema,
-} from "@/lib/cart-types";
 
+const postSchema = z.object({
+  tenantId: z.string().min(1),
+  item: z.object({
+    menuItemId: z.string().min(1),
+    qty: z.number().int().positive(),
+  }),
+});
+
+const putSchema = z.object({
+  tenantId: z.string().min(1),
+  menuItemId: z.string().min(1),
+  qty: z.number().int().positive(),
+});
+
+const deleteSchema = z.object({
+  tenantId: z.string().min(1),
+  menuItemId: z.string().min(1),
+});
+
+// Crea/actualiza (UP-SERT) 1 item
 export async function POST(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "auth_required" }, { status: 401 });
 
   const json = await req.json().catch(() => null);
-  const parsed = upsertItemSchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-  }
+  const parsed = postSchema.safeParse(json);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
 
   const { tenantId, item } = parsed.data;
 
-  // Upsert del cart ACTIVO
   const cart = await prisma.cart.upsert({
-    where: {
-      userId_tenantId_status: { userId, tenantId, status: "ACTIVE" },
-    },
+    where: { userId_tenantId_status: { userId, tenantId, status: "ACTIVE" } },
     update: {},
     create: { userId, tenantId, status: "ACTIVE" },
   });
 
-  // Snapshot del MenuItem del tenant
+  // Snapshot de MenuItem (si existe y activo)
   const mi = await prisma.menuItem.findFirst({
-    where: { id: item.menuItemId, menu: { tenantId }, active: true },
+    where: { id: item.menuItemId, active: true, menu: { tenantId } },
     select: { id: true, name: true, price: true },
   });
   if (!mi) return NextResponse.json({ error: "menu_item_not_found" }, { status: 404 });
 
   const existing = await prisma.cartItem.findFirst({
-    where: { cartId: cart.id, menuItemId: mi.id },
-    select: { id: true, qty: true },
+    where: { cartId: cart.id, menuItemId: item.menuItemId },
+    select: { id: true },
   });
 
   if (existing) {
     await prisma.cartItem.update({
       where: { id: existing.id },
-      data: { qty: existing.qty + item.qty, name: mi.name, price: mi.price },
+      data: { qty: item.qty, name: mi.name, price: mi.price },
     });
   } else {
     await prisma.cartItem.create({
@@ -60,36 +70,18 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Devuelve carrito actualizado
-  const fresh = await prisma.cart.findUnique({
-    where: { id: cart.id },
-    include: { items: true },
-  });
-
-  const safe = cartResponseSchema.parse({
-    items:
-      fresh?.items.map((ci) => ({
-        menuItemId: ci.menuItemId,
-        name: ci.name,
-        price: ci.price,
-        qty: ci.qty,
-      })) ?? [],
-  });
-
-  return NextResponse.json(safe, { status: 200 });
+  return NextResponse.json({ ok: true }, { status: 200 });
 }
 
-// Setear cantidad (0 => borrar)
-export async function PATCH(req: NextRequest) {
+// Ajusta cantidad exacta (set)
+export async function PUT(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "auth_required" }, { status: 401 });
 
   const json = await req.json().catch(() => null);
-  const parsed = setQtySchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-  }
+  const parsed = putSchema.safeParse(json);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
 
   const { tenantId, menuItemId, qty } = parsed.data;
 
@@ -99,32 +91,29 @@ export async function PATCH(req: NextRequest) {
   });
   if (!cart) return NextResponse.json({ error: "cart_not_found" }, { status: 404 });
 
-  const existing = await prisma.cartItem.findFirst({
+  const item = await prisma.cartItem.findFirst({
     where: { cartId: cart.id, menuItemId },
     select: { id: true },
   });
-  if (!existing) return NextResponse.json({ error: "item_not_found" }, { status: 404 });
+  if (!item) return NextResponse.json({ error: "item_not_found" }, { status: 404 });
 
-  if (qty === 0) {
-    await prisma.cartItem.delete({ where: { id: existing.id } });
-  } else {
-    await prisma.cartItem.update({ where: { id: existing.id }, data: { qty } });
-  }
+  await prisma.cartItem.update({
+    where: { id: item.id },
+    data: { qty },
+  });
 
   return NextResponse.json({ ok: true }, { status: 200 });
 }
 
-// Eliminar ítem
+// Elimina un item
 export async function DELETE(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "auth_required" }, { status: 401 });
 
   const json = await req.json().catch(() => null);
-  const parsed = removeItemSchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-  }
+  const parsed = deleteSchema.safeParse(json);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
 
   const { tenantId, menuItemId } = parsed.data;
 
@@ -134,7 +123,9 @@ export async function DELETE(req: NextRequest) {
   });
   if (!cart) return NextResponse.json({ error: "cart_not_found" }, { status: 404 });
 
-  await prisma.cartItem.deleteMany({ where: { cartId: cart.id, menuItemId } });
+  await prisma.cartItem.deleteMany({
+    where: { cartId: cart.id, menuItemId },
+  });
 
   return NextResponse.json({ ok: true }, { status: 200 });
 }

@@ -2,7 +2,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
 import { useCart } from "@/features/cart/cart-store";
+import { getLocalTenantId } from "@/lib/tenant-local";
 import { formatMXN } from "@/lib/money";
 import CartHydrator from "./CartHydrator";
 
@@ -76,6 +78,8 @@ function normalizeErrorMessage(data: unknown, fallback = "No se pudo crear la or
 }
 
 export default function CartPage() {
+  const { status } = useSession();
+
   const items = useCart((s) => s.items);
   const remove = useCart((s) => s.remove);
   const setQty = useCart((s) => s.setQty);
@@ -92,6 +96,29 @@ export default function CartPage() {
 
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // --- Sincronización puntual con servidor (solo si hay sesión) ---
+  function syncQtyWithServer(menuItemId: string, qty: number) {
+    const tenantId = getLocalTenantId();
+    if (status !== "authenticated" || !tenantId) return;
+    void fetch("/api/cart/items", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tenantId, menuItemId, qty }),
+      cache: "no-store",
+    }).catch(() => {});
+  }
+
+  function removeFromServer(menuItemId: string) {
+    const tenantId = getLocalTenantId();
+    if (status !== "authenticated" || !tenantId) return;
+    void fetch("/api/cart/items", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tenantId, menuItemId }),
+      cache: "no-store",
+    }).catch(() => {});
+  }
 
   if (!ready) {
     return (
@@ -124,13 +151,22 @@ export default function CartPage() {
               <p className="text-sm opacity-70">{formatMXN(it.price)} c/u</p>
             </div>
             <div className="flex items-center gap-2">
-              <QtyControl value={it.qty} onChange={(q) => setQty(it.id, q)} />
+              <QtyControl
+                value={it.qty}
+                onChange={(q) => {
+                  setQty(it.id, q);          // local
+                  syncQtyWithServer(it.id, q); // servidor (si hay sesión)
+                }}
+              />
               <div className="w-24 text-right font-medium">
                 {formatMXN(it.price * it.qty)}
               </div>
               <button
                 className="text-sm underline"
-                onClick={() => remove(it.id)}
+                onClick={() => {
+                  remove(it.id);            // local
+                  removeFromServer(it.id);  // servidor (si hay sesión)
+                }}
                 type="button"
               >
                 Quitar
@@ -164,6 +200,7 @@ export default function CartPage() {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify(payload),
+                cache: "no-store",
               });
 
               let data: unknown = null;
@@ -184,15 +221,17 @@ export default function CartPage() {
               if (isRecord(data)) {
                 if (typeof data.orderId === "string") {
                   orderId = data.orderId;
-                } else if (typeof data.id === "string") {
-                  orderId = data.id;
-                } else if (isRecord(data.order) && typeof data.order.id === "string") {
-                  orderId = data.order.id;
+                } else if (typeof (data as StringDict).id === "string") {
+                  orderId = String((data as StringDict).id);
+                } else if (
+                  isRecord((data as StringDict).order) &&
+                  typeof ((data as StringDict).order as StringDict).id === "string"
+                ) {
+                  orderId = String(((data as StringDict).order as StringDict).id);
                 }
               }
 
               if (!orderId) {
-                // mensaje legible + log
                 // eslint-disable-next-line no-console
                 console.warn("Respuesta inesperada de /api/orders:", data);
                 setMsg("La respuesta no incluyó un orderId.");

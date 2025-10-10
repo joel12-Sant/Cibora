@@ -7,52 +7,47 @@ import { getLocalTenantId, setLocalTenantId } from "@/lib/tenant-local";
 import type { CartResponse } from "@/lib/cart-types";
 
 /**
- * Sincroniza carrito con servidor sin borrar el local.
- * - Si hay sesión y tenantId:
- *    - con items locales: MERGE y solo actualiza cantidades devueltas
- *    - sin items locales: GET y solo agrega/actualiza cantidades devueltas
- * - Si no hay tenantId:
- *    - intenta /api/cart/latest para obtener tenantId e hidratar (sin borrar local)
+ * Sincroniza una sola vez por tenant al pasar a "authenticated".
+ * Si no hay tenantId:
+ *  - intenta /api/cart/latest
+ *  - si hay items locales, intenta /api/cart/detect-tenant para deducir tenant y hace MERGE
+ * Nunca borra items locales si el server devuelve 0 o falla.
+ *
+ * IMPORTANTE: Upsert en el store:
+ *  - si el item NO existe en Zustand -> add({ id, name, price }, qty)
+ *  - si ya existe -> setQty(id, qty)
  */
 export default function CartHydrator() {
   const { status } = useSession();
+
   const items = useCart((s) => s.items);
+  const add = useCart((s) => s.add);
   const setQty = useCart((s) => s.setQty);
 
-  const ranRef = useRef(false);
+  const mergedTenantsRef = useRef<Set<string>>(new Set());
+
+  // util: inserta o actualiza el item en el store
+  function upsertFromServer(server: { menuItemId: string; name: string; price: number; qty: number }) {
+    const exists = items.some((it) => it.id === server.menuItemId);
+    if (exists) {
+      setQty(server.menuItemId, server.qty);
+    } else {
+      add({ id: server.menuItemId, name: server.name, price: server.price }, server.qty);
+    }
+  }
 
   useEffect(() => {
-    if (ranRef.current) return;
-    ranRef.current = true;
-    if (status === "loading") return;
+    if (status !== "authenticated") return;
 
-    async function sync() {
+    let cancelled = false;
+
+    async function runOnceForTenant(tenantId: string) {
+      if (mergedTenantsRef.current.has(tenantId)) return; // ya procesado esta sesión
+      mergedTenantsRef.current.add(tenantId);
+
       try {
-        if (status !== "authenticated") return;
-
-        let tenantId = getLocalTenantId();
-
-        if (!tenantId) {
-          // Fallback: pregunta al server el último carrito activo
-          const r = await fetch("/api/cart/latest", { cache: "no-store" });
-          if (r.ok) {
-            const data = (await r.json()) as CartResponse & { tenantId: string | null };
-            if (data.tenantId) {
-              tenantId = data.tenantId;
-              // Hidrata SIN borrar: solo asegura cantidades de lo devuelto
-              for (const it of data.items) {
-                setQty(it.menuItemId, it.qty);
-              }
-              setLocalTenantId(data.tenantId);
-            }
-          }
-          // sin tenantId y/o sin items en server → no tocamos el local
-          return;
-        }
-
-        // Con tenantId…
         if (items.length > 0) {
-          // MERGE: si el server devuelve vacío, NO borres el local
+          // MERGE idempotente
           const res = await fetch("/api/cart/merge", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -62,29 +57,74 @@ export default function CartHydrator() {
             }),
             cache: "no-store",
           });
-          if (!res.ok) return;
+          if (!res.ok || cancelled) return;
           const data = (await res.json()) as CartResponse;
-          if (data.items.length === 0) return; // no destructivo
-          for (const it of data.items) {
-            setQty(it.menuItemId, it.qty);
-          }
+          if (cancelled || data.items.length === 0) return;
+          for (const it of data.items) upsertFromServer(it);
         } else {
-          // GET: hidrata SIN borrar el local (por si llega tardío)
+          // Hidratar desde BD
           const res = await fetch(`/api/cart?tenantId=${tenantId}`, { cache: "no-store" });
-          if (!res.ok) return;
+          if (!res.ok || cancelled) return;
           const data = (await res.json()) as CartResponse;
-          if (data.items.length === 0) return;
-          for (const it of data.items) {
-            setQty(it.menuItemId, it.qty);
-          }
+          if (cancelled || data.items.length === 0) return;
+          for (const it of data.items) upsertFromServer(it);
         }
       } catch {
-        // silencioso
+        // noop
       }
     }
 
-    void sync();
-  }, [status, items, setQty]);
+    (async () => {
+      let tenantId = getLocalTenantId();
+
+      // 1) Si no hay tenantId, prueba el último carrito activo en servidor
+      if (!tenantId) {
+        try {
+          const r = await fetch("/api/cart/latest", { cache: "no-store" });
+          if (r.ok) {
+            const data = (await r.json()) as CartResponse & { tenantId: string | null };
+            if (data.tenantId && !cancelled) {
+              tenantId = data.tenantId;
+              for (const it of data.items) upsertFromServer(it);
+              setLocalTenantId(data.tenantId);
+              await runOnceForTenant(data.tenantId);
+              return;
+            }
+          }
+        } catch { /* noop */ }
+      }
+
+      // 2) Si sigue sin tenantId pero hay items locales, dedúcelo por los items
+      if (!tenantId && items.length > 0) {
+        try {
+          const res = await fetch("/api/cart/detect-tenant", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ items: items.map((i) => ({ menuItemId: i.id })) }),
+            cache: "no-store",
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { tenantId: string };
+            if (data.tenantId && !cancelled) {
+              setLocalTenantId(data.tenantId);
+              await runOnceForTenant(data.tenantId);
+            }
+          }
+        } catch { /* noop */ }
+        return;
+      }
+
+      // 3) Con tenantId conocido, ejecuta merge/hydrate una vez
+      if (tenantId) {
+        await runOnceForTenant(tenantId);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Dependemos de status y de la referencia a los handlers (add/setQty) y lista actual (items)
+  }, [status, items, add, setQty]);
 
   return null;
 }

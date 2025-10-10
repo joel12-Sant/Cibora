@@ -1,5 +1,4 @@
 import Link from "next/link";
-//import { AddToCartButton } from "@/features/cart/AddToCartBuntton";
 import AddToCartButton from "@/components/cart/AddToCartButton";
 
 type MenuItem = {
@@ -29,8 +28,7 @@ export default async function Page({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-
+  const { id } = await params; // 👈 este 'id' es el tenantId
   const menu = await getMenu(id);
 
   return (
@@ -47,14 +45,19 @@ export default async function Page({
       ) : (
         <ul className="divide-y rounded-xl border">
           {menu.map((it) => (
-  <li key={it.id} className="flex items-center justify-between p-3">
-    <div>
-      <p className="font-medium">{it.name}</p>
-      <p className="text-sm opacity-70">${it.price}.00 MXN</p>
-    </div>
-    <AddToCartButton id={it.id} name={it.name} price={it.price} />
-  </li>
-))}
+            <li key={it.id} className="flex items-center justify-between p-3">
+              <div>
+                <p className="font-medium">{it.name}</p>
+                <p className="text-sm opacity-70">${it.price}.00 MXN</p>
+              </div>
+              <AddToCartButton
+                tenantId={id}         // 👈 ahora pasamos el tenantId
+                id={it.id}
+                name={it.name}
+                price={it.price}
+              />
+            </li>
+          ))}
         </ul>
       )}
     </main>
