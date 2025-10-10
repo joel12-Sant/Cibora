@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Role, OrderStatus } from "@prisma/client";
 import ItemsTable from "@/app/dashboard/ItemsTable";
 import { formatMXN } from "@/lib/money";
-import OrderStatusActions from "@/components/orders/OrderStatusActions";
 
 type SearchParamsPromise = Promise<Record<string, string | string[] | undefined>>;
 type Props = { searchParams?: SearchParamsPromise };
@@ -41,6 +40,21 @@ export default async function DashboardPage({ searchParams }: Props) {
     ...(statusFilter ? { status: statusFilter } : {}),
   };
 
+  // Contadores por estado (para los chips)
+  const counts = await prisma.order.groupBy({
+    by: ["status"],
+    where: { tenantId: user.tenantId },
+    _count: { _all: true },
+  });
+
+  const countByStatus = new Map<OrderStatus, number>(
+    Object.values(OrderStatus).map((s) => [s, 0]),
+  );
+  for (const row of counts) {
+    countByStatus.set(row.status, row._count._all);
+  }
+  const totalAll = Array.from(countByStatus.values()).reduce((a, b) => a + b, 0);
+
   const [orders, items] = await Promise.all([
     prisma.order.findMany({
       where: whereOrders,
@@ -67,19 +81,17 @@ export default async function DashboardPage({ searchParams }: Props) {
     <main className="mx-auto max-w-4xl p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Panel del restaurante</h1>
 
-      <div className="flex gap-2 text-sm">
-        <span>Filtrar:</span>
-        <Link href={makeHref()} className={`underline ${!statusFilter ? "font-semibold" : ""}`}>
-          Todos
-        </Link>
+      {/* Chips de conteo por estado */}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <Chip href={makeHref()} active={!statusFilter} label={`Todos`} count={totalAll} />
         {Object.values(OrderStatus).map((s) => (
-          <Link
+          <Chip
             key={s}
             href={makeHref(s)}
-            className={`underline ${statusFilter === s ? "font-semibold" : ""}`}
-          >
-            {s}
-          </Link>
+            active={statusFilter === s}
+            label={s}
+            count={countByStatus.get(s) ?? 0}
+          />
         ))}
       </div>
 
@@ -95,9 +107,12 @@ export default async function DashboardPage({ searchParams }: Props) {
                 </p>
               </div>
 
-              {/* ⬇️ Aquí va el paso 3: solo props primitivas */}
               <div className="flex items-center gap-3">
+                {/* Control de estado (cliente) */}
                 <OrderStatusActions orderId={o.id} initialStatus={o.status} />
+                <Link className="text-sm underline" href={`/dashboard/orders/${o.id}`}>
+                  Gestionar
+                </Link>
                 <Link className="text-sm underline" href={`/orders/${o.id}/confirmation`}>
                   Ver
                 </Link>
@@ -107,6 +122,7 @@ export default async function DashboardPage({ searchParams }: Props) {
           {orders.length === 0 && <li className="p-3 opacity-70">Sin pedidos.</li>}
         </ul>
       </section>
+
       <section>
         <h2 className="mb-2 font-medium">Menú</h2>
         <ItemsTable items={items} />
@@ -114,3 +130,18 @@ export default async function DashboardPage({ searchParams }: Props) {
     </main>
   );
 }
+
+/** Chip de estado (server-safe: solo usa props primitivas) */
+function Chip(props: { href: string; active: boolean; label: string; count: number }) {
+  const base = "inline-flex items-center gap-2 rounded-full border px-3 py-1";
+  const act = props.active ? "bg-black text-white border-black" : "bg-white text-black";
+  return (
+    <Link href={props.href} className={`${base} ${act}`}>
+      <span>{props.label}</span>
+      <span className="text-xs opacity-80">{props.count}</span>
+    </Link>
+  );
+}
+
+// Importa el componente client (con "use client" adentro)
+import OrderStatusActions from "@/components/orders/OrderStatusActions";
