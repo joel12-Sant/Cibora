@@ -26,6 +26,9 @@ export default async function SignInPage({
 
       <p className="text-sm opacity-80">
         ¿No tienes cuenta?{" "}
+        <Link className="underline" href="/auth/signup" prefetch={false}>
+          Crear cuenta
+        </Link>
         <Link className="underline" href="/">
           Volver al inicio
         </Link>

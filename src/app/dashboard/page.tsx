@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Role, OrderStatus } from "@prisma/client";
 import { formatMXN } from "@/lib/money";
 import ItemsTable from "@/app/dashboard/ItemsTable";
+import OrderStatusActions from "@/components/orders/OrderStatusActions";
 
 type SearchParamsPromise = Promise<Record<string, string | string[] | undefined>>;
 type Props = { searchParams?: SearchParamsPromise };
@@ -16,7 +17,9 @@ function isOrderStatus(x: unknown): x is OrderStatus {
 export default async function DashboardPage({ searchParams }: Props) {
   const session = await auth();
   const user = session?.user ?? null;
-  const ALLOWED = new Set<Role>(["MERCHANT_OWNER", "MERCHANT_STAFF", "ADMIN"] as const);
+
+  // ✅ Usar el enum Role para evitar errores de tipos
+  const ALLOWED = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN]);
 
   if (!user || !user.tenantId || !ALLOWED.has(user.role)) {
     return (
@@ -25,7 +28,7 @@ export default async function DashboardPage({ searchParams }: Props) {
         <Link className="underline" href="/">Volver</Link>
       </main>
     );
-  }
+    }
 
   const spRaw =
     (await (searchParams ??
@@ -74,7 +77,7 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   const makeHref = (s?: OrderStatus) => (s ? `/dashboard?status=${s}` : "/dashboard");
 
-  // ⬇️ NUEVO: helpers para enlaces de exportación
+  // Enlaces de exportación
   const now = new Date();
   const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const toISODate = (d: Date) => d.toISOString().slice(0, 10); // YYYY-MM-DD
@@ -103,13 +106,13 @@ export default async function DashboardPage({ searchParams }: Props) {
         ))}
       </div>
 
-      {/* ⬇️ NUEVO: acciones de exportación */}
+      {/* Acciones de exportación */}
       <div className="flex flex-wrap gap-2 text-sm">
         <a
           href={exportAllHref}
           className="inline-flex items-center gap-2 rounded-md border px-3 py-1 underline"
         >
-          Exportar CSV (todos {statusFilter ? `- ${statusFilter}` : ""})
+          Exportar CSV (todos{statusFilter ? ` - ${statusFilter}` : ""})
         </a>
         <a
           href={export30Href}
@@ -131,6 +134,7 @@ export default async function DashboardPage({ searchParams }: Props) {
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                {/* ⬇️ Acciones para cambiar estado */}
                 <OrderStatusActions orderId={o.id} initialStatus={o.status} />
                 <Link className="text-sm underline" href={`/dashboard/orders/${o.id}`}>
                   Gestionar
@@ -163,5 +167,3 @@ function Chip(props: { href: string; active: boolean; label: string; count: numb
     </Link>
   );
 }
-
-import OrderStatusActions from "@/components/orders/OrderStatusActions";

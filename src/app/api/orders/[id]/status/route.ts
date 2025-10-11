@@ -1,75 +1,87 @@
 // src/app/api/orders/[id]/status/route.ts
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { z } from "zod";
 import { OrderStatus, Role } from "@prisma/client";
 
-type Ctx = { params: Promise<{ id: string }> };
+type Context = { params: { id: string } };
 
-const BodySchema = z.object({
-  status: z.nativeEnum(OrderStatus),
-});
+const ALLOWED_NEXT: Record<OrderStatus, OrderStatus[]> = {
+  [OrderStatus.CREATED]: [OrderStatus.PREPARING, OrderStatus.CANCELED],
+  [OrderStatus.PREPARING]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELED],
+  [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
+  [OrderStatus.DELIVERED]: [],
+  // Si tu flujo permite mover PAID -> PREPARING:
+  [OrderStatus.PAID]: [OrderStatus.PREPARING, OrderStatus.CANCELED],
+  [OrderStatus.CANCELED]: [],
+};
 
-const ALLOWED_ROLES: Role[] = ["MERCHANT_OWNER", "MERCHANT_STAFF", "ADMIN"] as const;
+// ✅ evitar problema de includes() con tuples
+const MERCHANT_ROLES = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF]);
 
-function canTransition(from: OrderStatus, to: OrderStatus): boolean {
-  const flow: Record<OrderStatus, OrderStatus[]> = {
-    CREATED: ["PAID", "CANCELED"],
-    PAID: ["PREPARING", "CANCELED"],
-    PREPARING: ["OUT_FOR_DELIVERY", "CANCELED"],
-    OUT_FOR_DELIVERY: ["DELIVERED", "CANCELED"],
-    DELIVERED: [],
-    CANCELED: [],
-  };
-  return flow[from].includes(to);
-}
-
-export async function PATCH(req: NextRequest, { params }: Ctx) {
+export async function PATCH(
+  req: NextRequest,
+  { params }: Context
+): Promise<NextResponse> {
+  // Autenticación
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const user = session?.user as
+    | { id: string; role: Role; tenantId: string | null }
+    | undefined;
 
-  const role = session.user.role;
-  if (!ALLOWED_ROLES.includes(role)) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 403 });
+  if (!user || !user.tenantId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!MERCHANT_ROLES.has(user.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { id } = await params;
+  const { id } = params;
 
-  const json = await req.json().catch(() => null);
-  const parsed = BodySchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+  // Parse body
+  let payload: unknown;
+  try {
+    payload = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
-  const { status: nextStatus } = parsed.data;
 
-  // Trae la orden con su tenant
+  const statusStr = (payload as { status?: string })?.status;
+  if (!statusStr) {
+    return NextResponse.json({ error: "Missing status" }, { status: 400 });
+  }
+
+  // Validar que sea un valor del enum OrderStatus
+  const status = (Object.values(OrderStatus) as string[]).includes(statusStr)
+    ? (statusStr as OrderStatus)
+    : undefined;
+
+  if (!status) {
+    return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
+  }
+
+  // Traer orden y verificar tenant
   const order = await prisma.order.findUnique({
     where: { id },
     select: { id: true, status: true, tenantId: true },
   });
-  if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
-  // Merchant debe ser del mismo tenant (admin puede todo)
-  if (role !== "ADMIN") {
-    if (!session.user.tenantId || session.user.tenantId !== order.tenantId) {
-      return NextResponse.json({ error: "Tenant inválido" }, { status: 403 });
-    }
+  if (!order || order.tenantId !== user.tenantId) {
+    return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  if (!canTransition(order.status, nextStatus)) {
+  // Validar transición
+  const allowed = ALLOWED_NEXT[order.status] ?? [];
+  if (!allowed.includes(status)) {
     return NextResponse.json(
-      { error: `Transición inválida: ${order.status} → ${nextStatus}` },
-      { status: 400 },
+      { error: `Illegal transition ${order.status} -> ${status}` },
+      { status: 400 }
     );
   }
 
   const updated = await prisma.order.update({
     where: { id: order.id },
-    data: { status: nextStatus },
+    data: { status },
     select: { id: true, status: true },
   });
 

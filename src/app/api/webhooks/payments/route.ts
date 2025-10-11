@@ -1,4 +1,3 @@
-// src/app/api/webhooks/payments/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -76,21 +75,19 @@ export async function POST(req: NextRequest) {
             });
           }
 
-          // Traer orden para saber user/tenant
           const order = await tx.order.findUnique({
             where: { id: orderId },
             select: { id: true, status: true, userId: true, tenantId: true },
           });
           if (!order) return;
 
-          // Orden → PAID (si aún no lo está)
           if (order.status !== OrderStatus.PAID) {
             await tx.order.update({
               where: { id: order.id },
               data: { status: OrderStatus.PAID },
             });
           }
-          
+
           try {
             const cart = await tx.cart.findFirst({
               where: {
