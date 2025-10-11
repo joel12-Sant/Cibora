@@ -1,4 +1,3 @@
-// src/app/cart/CartHydrator.tsx
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -7,17 +6,6 @@ import { useCart } from "@/features/cart/cart-store";
 import { getLocalTenantId, setLocalTenantId } from "@/lib/tenant-local";
 import type { CartResponse } from "@/lib/cart-types";
 
-/**
- * Sincroniza una sola vez por tenant al pasar a "authenticated".
- * Si no hay tenantId:
- *  - intenta /api/cart/latest
- *  - si hay items locales, intenta /api/cart/detect-tenant para deducir tenant y hace MERGE
- * Nunca borra items locales si el server devuelve 0 o falla.
- *
- * UPSERT en store:
- *  - si no existe -> add({ id, name, price }, qty)
- *  - si existe -> setQty(id, qty)
- */
 export default function CartHydrator() {
   const { status } = useSession();
 
@@ -42,7 +30,7 @@ export default function CartHydrator() {
     let cancelled = false;
 
     async function runOnceForTenant(tenantId: string) {
-      if (mergedTenantsRef.current.has(tenantId)) return; // ya procesado esta sesión
+      if (mergedTenantsRef.current.has(tenantId)) return;
       mergedTenantsRef.current.add(tenantId);
 
       try {

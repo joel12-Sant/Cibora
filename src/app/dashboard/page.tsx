@@ -18,7 +18,6 @@ export default async function DashboardPage({ searchParams }: Props) {
   const session = await auth();
   const user = session?.user ?? null;
 
-  // ✅ Usar el enum Role para evitar errores de tipos
   const ALLOWED = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN]);
 
   if (!user || !user.tenantId || !ALLOWED.has(user.role)) {
@@ -77,7 +76,6 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   const makeHref = (s?: OrderStatus) => (s ? `/dashboard?status=${s}` : "/dashboard");
 
-  // Enlaces de exportación
   const now = new Date();
   const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const toISODate = (d: Date) => d.toISOString().slice(0, 10); // YYYY-MM-DD
@@ -134,7 +132,7 @@ export default async function DashboardPage({ searchParams }: Props) {
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                {/* ⬇️ Acciones para cambiar estado */}
+                {/* Acciones para cambiar estado */}
                 <OrderStatusActions orderId={o.id} initialStatus={o.status} />
                 <Link className="text-sm underline" href={`/dashboard/orders/${o.id}`}>
                   Gestionar

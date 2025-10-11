@@ -1,107 +1,165 @@
 // src/app/api/orders/export/route.ts
-export const runtime = "nodejs";
-
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { OrderStatus, Role } from "@prisma/client";
+import { OrderStatus, Role, Prisma } from "@prisma/client";
 
-function isOrderStatus(x: unknown): x is OrderStatus {
-  return typeof x === "string" && (Object.values(OrderStatus) as string[]).includes(x);
-}
-
-function parseDate(d?: string | null): Date | undefined {
-  if (!d) return undefined;
-  const t = Date.parse(d);
-  return Number.isFinite(t) ? new Date(t) : undefined;
-}
-
-function csvEscape(v: string): string {
-  // Escapa comillas dobles y rodea en comillas si hay comas, comillas o saltos de línea
-  const needsWrap = /[",\n]/.test(v);
-  const esc = v.replace(/"/g, '""');
-  return needsWrap ? `"${esc}"` : esc;
-}
-
+// Exporta CSV de pedidos del tenant del merchant.
+// Query opcional:
+//   - status=CREATED|PAID|... (OrderStatus)
+//   - from=YYYY-MM-DD
+//   - to=YYYY-MM-DD
 export async function GET(req: NextRequest) {
+  // 1) Auth + autorización
   const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  const user = session?.user as
+    | { id: string; role: Role; tenantId: string | null }
+    | undefined;
+
+  const MERCHANT_ROLES = new Set<Role>([
+    Role.MERCHANT_OWNER,
+    Role.MERCHANT_STAFF,
+    Role.ADMIN, // si quieres permitir admin
+  ]);
+
+  if (!user || !user.tenantId || !MERCHANT_ROLES.has(user.role)) {
+    return new Response("Unauthorized", { status: 401 });
   }
 
-  const role = session.user.role as Role;
-  const tenantId = session.user.tenantId ?? null;
-  const url = new URL(req.url);
-  const statusParam = url.searchParams.get("status");
-  const fromParam = url.searchParams.get("from");
-  const toParam = url.searchParams.get("to");
+  // 2) Query params
+  const { searchParams } = new URL(req.url);
+  const statusParam = searchParams.get("status");
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
 
-  const status = isOrderStatus(statusParam) ? statusParam : undefined;
-  const from = parseDate(fromParam);
-  const to = parseDate(toParam);
+  const status =
+    statusParam && (Object.values(OrderStatus) as string[]).includes(statusParam)
+      ? (statusParam as OrderStatus)
+      : undefined;
 
-  // Filtros base (tenant guard)
-  const whereBase: Record<string, unknown> = {};
-  if (role !== "ADMIN") {
-    if (!tenantId) {
-      return NextResponse.json({ error: "Tenant inválido" }, { status: 403 });
-    }
-    whereBase.tenantId = tenantId;
-  }
-  if (status) whereBase.status = status;
-  if (from || to) {
-    whereBase.createdAt = {
-      ...(from ? { gte: from } : {}),
-      ...(to ? { lte: to } : {}),
-    };
-  }
+  const fromDate = fromParam ? safeStartOfDay(fromParam) : undefined;
+  const toDate = toParam ? safeEndOfDay(toParam) : undefined;
 
+  // 3) Filtro WHERE (👉 usar tipo de Prisma directamente)
+  const where: Prisma.OrderWhereInput = {
+    tenantId: user.tenantId ?? undefined,
+    ...(status ? { status } : {}),
+    ...(fromDate || toDate
+      ? {
+          createdAt: {
+            ...(fromDate ? { gte: fromDate } : {}),
+            ...(toDate ? { lte: toDate } : {}),
+          },
+        }
+      : {}),
+  };
+
+  // 4) Cargar pedidos + items
   const orders = await prisma.order.findMany({
-    where: whereBase,
+    where,
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
-      createdAt: true,
       status: true,
-      total: true, // en PESOS (p.ej. 640 = $640.00)
+      total: true,
+      createdAt: true,
       user: { select: { email: true, name: true } },
-      _count: { select: { items: true } },
+      items: { select: { name: true, price: true, qty: true } },
     },
   });
 
-  // Armar CSV
-  const header = [
-    "order_id",
-    "created_at",
-    "status",
-    "items_count",
-    "total_mxn",
-    "customer_email",
-    "customer_name",
-  ];
-  const rows = orders.map((o) => [
-    o.id,
-    o.createdAt.toISOString(),
-    o.status,
-    String(o._count.items),
-    // total en pesos, con 2 decimales para planillas
-    (o.total ?? 0).toFixed(2),
-    o.user?.email ?? "",
-    o.user?.name ?? "",
-  ]);
+  // 5) Construir CSV
+  const rows: string[] = [];
+  rows.push(
+    [
+      "order_id",
+      "created_at",
+      "status",
+      "customer_name",
+      "customer_email",
+      "total_cents",
+      "items_count",
+      "items_breakdown",
+    ]
+      .map(csvEscape)
+      .join(","),
+  );
 
-  const csv = [header, ...rows]
-    .map((cols) => cols.map((c) => csvEscape(String(c))).join(","))
-    .join("\n");
+  for (const o of orders) {
+    const itemsCount = o.items.reduce((acc, it) => acc + it.qty, 0);
+    const breakdown = o.items
+      .map((it) => `${it.qty} x ${it.name} ($${formatCents(it.price)})`)
+      .join(" | ");
 
-  const res = new NextResponse(csv, {
+    rows.push(
+      [
+        o.id,
+        o.createdAt.toISOString(),
+        o.status,
+        o.user?.name ?? "",
+        o.user?.email ?? "",
+        String(o.total),
+        String(itemsCount),
+        breakdown,
+      ]
+        .map(csvEscape)
+        .join(","),
+    );
+  }
+
+  const csv = rows.join("\n");
+  const filename = buildFilename(status, fromParam, toParam);
+
+  return new Response(csv, {
     status: 200,
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="orders_export.csv"`,
-      "Cache-Control": "no-store",
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}"`,
+      "cache-control": "no-store",
     },
   });
+}
 
-  return res;
+// ---------- helpers ----------
+
+function csvEscape(v: string): string {
+  const needsQuotes = /[",\n]/.test(v);
+  const escaped = v.replace(/"/g, '""');
+  return needsQuotes ? `"${escaped}"` : escaped;
+}
+
+function formatCents(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const abs = Math.abs(cents);
+  const dollars = Math.floor(abs / 100);
+  const remainder = abs % 100;
+  return `${sign}${dollars}.${remainder.toString().padStart(2, "0")}`;
+}
+
+function safeStartOfDay(isoDate: string): Date | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return undefined;
+  const d = new Date(`${isoDate}T00:00:00`);
+  return isNaN(d.getTime()) ? undefined : d;
+}
+
+function safeEndOfDay(isoDate: string): Date | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return undefined;
+  const d = new Date(`${isoDate}T23:59:59.999`);
+  return isNaN(d.getTime()) ? undefined : d;
+}
+
+function buildFilename(
+  status?: OrderStatus,
+  fromParam?: string | null,
+  toParam?: string | null,
+): string {
+  const parts: string[] = ["orders"];
+  if (status) parts.push(status.toLowerCase());
+  if (fromParam || toParam) {
+    parts.push((fromParam ?? "start").replaceAll("-", ""));
+    parts.push((toParam ?? "now").replaceAll("-", ""));
+  }
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  parts.push(ts);
+  return `${parts.join("_")}.csv`;
 }
