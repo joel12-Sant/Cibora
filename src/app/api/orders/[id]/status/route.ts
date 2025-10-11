@@ -4,26 +4,23 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { OrderStatus, Role } from "@prisma/client";
 
-type Context = { params: { id: string } };
+// 👇 OJO: aquí el tipo de params es Promise<{ id: string }>
+type Ctx = { params: Promise<{ id: string }> };
 
 const ALLOWED_NEXT: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.CREATED]: [OrderStatus.PREPARING, OrderStatus.CANCELED],
   [OrderStatus.PREPARING]: [OrderStatus.OUT_FOR_DELIVERY, OrderStatus.CANCELED],
   [OrderStatus.OUT_FOR_DELIVERY]: [OrderStatus.DELIVERED],
   [OrderStatus.DELIVERED]: [],
-  // Si tu flujo permite mover PAID -> PREPARING:
   [OrderStatus.PAID]: [OrderStatus.PREPARING, OrderStatus.CANCELED],
   [OrderStatus.CANCELED]: [],
 };
 
-// ✅ evitar problema de includes() con tuples
 const MERCHANT_ROLES = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF]);
 
-export async function PATCH(
-  req: NextRequest,
-  { params }: Context
-): Promise<NextResponse> {
-  // Autenticación
+export async function PATCH(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
+  const { id } = await ctx.params; // 👈 extraer params con await
+
   const session = await auth();
   const user = session?.user as
     | { id: string; role: Role; tenantId: string | null }
@@ -36,9 +33,6 @@ export async function PATCH(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { id } = params;
-
-  // Parse body
   let payload: unknown;
   try {
     payload = await req.json();
@@ -51,7 +45,6 @@ export async function PATCH(
     return NextResponse.json({ error: "Missing status" }, { status: 400 });
   }
 
-  // Validar que sea un valor del enum OrderStatus
   const status = (Object.values(OrderStatus) as string[]).includes(statusStr)
     ? (statusStr as OrderStatus)
     : undefined;
@@ -60,7 +53,6 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
   }
 
-  // Traer orden y verificar tenant
   const order = await prisma.order.findUnique({
     where: { id },
     select: { id: true, status: true, tenantId: true },
@@ -70,7 +62,6 @@ export async function PATCH(
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
-  // Validar transición
   const allowed = ALLOWED_NEXT[order.status] ?? [];
   if (!allowed.includes(status)) {
     return NextResponse.json(

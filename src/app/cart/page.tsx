@@ -57,7 +57,6 @@ function normalizeErrorMessage(data: unknown, fallback = "No se pudo crear la or
       return ((data as { _errors: string[] })._errors).join(", ");
     }
 
-    // items._errors o items.0.id._errors
     const items = (data as StringDict)["items"];
     if (isRecord(items)) {
       if ("_errors" in items && isStringArray((items as StringDict)["_errors"])) {
@@ -232,7 +231,6 @@ export default function CartPage() {
               }
 
               if (!orderId) {
-                // eslint-disable-next-line no-console
                 console.warn("Respuesta inesperada de /api/orders:", data);
                 setMsg("La respuesta no incluyó un orderId.");
                 setCreating(false);

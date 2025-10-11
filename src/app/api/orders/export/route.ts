@@ -4,11 +4,6 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { OrderStatus, Role, Prisma } from "@prisma/client";
 
-// Exporta CSV de pedidos del tenant del merchant.
-// Query opcional:
-//   - status=CREATED|PAID|... (OrderStatus)
-//   - from=YYYY-MM-DD
-//   - to=YYYY-MM-DD
 export async function GET(req: NextRequest) {
   // 1) Auth + autorización
   const session = await auth();

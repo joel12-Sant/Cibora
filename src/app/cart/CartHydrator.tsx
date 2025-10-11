@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useCart } from "@/features/cart/cart-store";
 import { getLocalTenantId, setLocalTenantId } from "@/lib/tenant-local";
@@ -15,14 +15,18 @@ export default function CartHydrator() {
 
   const mergedTenantsRef = useRef<Set<string>>(new Set());
 
-  function upsertFromServer(server: { menuItemId: string; name: string; price: number; qty: number }) {
-    const exists = items.some((it) => it.id === server.menuItemId);
-    if (exists) {
-      setQty(server.menuItemId, server.qty);
-    } else {
-      add({ id: server.menuItemId, name: server.name, price: server.price }, server.qty);
-    }
-  }
+  // ✅ Memoizar para satisfacer exhaustive-deps y evitar cambios de referencia innecesarios
+  const upsertFromServer = useCallback(
+    (server: { menuItemId: string; name: string; price: number; qty: number }) => {
+      const exists = items.some((it) => it.id === server.menuItemId);
+      if (exists) {
+        setQty(server.menuItemId, server.qty);
+      } else {
+        add({ id: server.menuItemId, name: server.name, price: server.price }, server.qty);
+      }
+    },
+    [items, setQty, add],
+  );
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -79,7 +83,9 @@ export default function CartHydrator() {
               return;
             }
           }
-        } catch { /* noop */ }
+        } catch {
+          /* noop */
+        }
       }
 
       // 2) Si sigue sin tenantId pero hay items locales, dedúcelo por los items
@@ -98,7 +104,9 @@ export default function CartHydrator() {
               await runOnceForTenant(data.tenantId);
             }
           }
-        } catch { /* noop */ }
+        } catch {
+          /* noop */
+        }
         return;
       }
 
@@ -111,7 +119,8 @@ export default function CartHydrator() {
     return () => {
       cancelled = true;
     };
-  }, [status, items, add, setQty]);
+    // ✅ Añadir upsertFromServer para cumplir exhaustive-deps
+  }, [status, items, upsertFromServer]);
 
   return null;
 }
