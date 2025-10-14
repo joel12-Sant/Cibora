@@ -27,31 +27,9 @@ function parseDateISOEnd(s?: string): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d;
 }
 
-/** Convierte entrada en MXN a centavos.
- * "240" -> { min: 24000 }  (mínimo 240 MXN)
- * "=240" -> { exact: 24000 } (exactamente 240 MXN)
- * "6.40" -> { min: 640 } (o exact si antecede '=')
- * "6,40" igual que "6.40"
- */
-function parseMoneyFilter(input?: string): { min?: number; exact?: number } {
-  if (!input) return {};
-  let s = input.trim();
-  let exact = false;
-  if (s.startsWith("=")) {
-    exact = true;
-    s = s.slice(1).trim();
-  }
-  s = s.replace(",", ".");
-  if (!/^\d+(\.\d{1,2})?$/.test(s)) return {};
-  const pesos = Number(s);
-  const cents = Math.round(pesos * 100);
-  return exact ? { exact: cents } : { min: cents };
-}
-
 export default async function DashboardPage({ searchParams }: Props) {
   const session = await auth();
   const user = session?.user ?? null;
-
   const ALLOWED = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN]);
 
   if (!user || !user.tenantId || !ALLOWED.has(user.role)) {
@@ -67,37 +45,21 @@ export default async function DashboardPage({ searchParams }: Props) {
     (await (searchParams ??
       Promise.resolve({} as Record<string, string | string[] | undefined>))) ?? {};
 
-  // status
-  const statusParam = spRaw.status;
-  const statusStr = Array.isArray(statusParam) ? statusParam[0] : statusParam;
+  const statusStr = Array.isArray(spRaw.status) ? spRaw.status[0] : spRaw.status;
   const statusFilter = isOrderStatus(statusStr) ? statusStr : undefined;
 
-  // filtros
   const qParam = Array.isArray(spRaw.q) ? spRaw.q[0] : spRaw.q;
   const fromParam = Array.isArray(spRaw.from) ? spRaw.from[0] : spRaw.from;
   const toParam = Array.isArray(spRaw.to) ? spRaw.to[0] : spRaw.to;
-  const minTotalMxParam = Array.isArray(spRaw.minTotalMx) ? spRaw.minTotalMx[0] : spRaw.minTotalMx;
 
   const fromDate = parseDateISO(fromParam);
   const toDate = parseDateISOEnd(toParam);
-  const { min: minTotalCents, exact: exactTotalCents } = parseMoneyFilter(minTotalMxParam);
 
-  // WHERE compuesto y tipado
   const whereOrders: Prisma.OrderWhereInput = {
     tenantId: user.tenantId ?? undefined,
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(fromDate || toDate
-      ? {
-          createdAt: {
-            ...(fromDate ? { gte: fromDate } : {}),
-            ...(toDate ? { lte: toDate } : {}),
-          },
-        }
-      : {}),
-    ...(exactTotalCents !== undefined
-      ? { total: exactTotalCents }
-      : minTotalCents !== undefined
-      ? { total: { gte: minTotalCents } }
+      ? { createdAt: { ...(fromDate ? { gte: fromDate } : {}), ...(toDate ? { lte: toDate } : {}) } }
       : {}),
     ...(qParam
       ? {
@@ -110,13 +72,12 @@ export default async function DashboardPage({ searchParams }: Props) {
       : {}),
   };
 
-  // Contadores por estado (por tenant)
+  // Conteos por estado (chips)
   const counts = await prisma.order.groupBy({
     by: ["status"],
     where: { tenantId: user.tenantId },
     _count: { _all: true },
   });
-
   const countByStatus = new Map<OrderStatus, number>(
     Object.values(OrderStatus).map((s) => [s, 0]),
   );
@@ -146,7 +107,6 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   const makeHref = (s?: OrderStatus) => (s ? `/dashboard?status=${s}` : "/dashboard");
 
-  // Export (igual)
   const now = new Date();
   const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const toISODate = (d: Date) => d.toISOString().slice(0, 10);
@@ -161,7 +121,6 @@ export default async function DashboardPage({ searchParams }: Props) {
     <main className="mx-auto max-w-5xl p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Panel del restaurante</h1>
 
-      {/* Chips por estado */}
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Chip href={makeHref()} active={!statusFilter} label={`Todos`} count={totalAll} />
         {Object.values(OrderStatus).map((s) => (
@@ -175,21 +134,13 @@ export default async function DashboardPage({ searchParams }: Props) {
         ))}
       </div>
 
-      {/* Filtros */}
       <OrdersFilter />
 
-      {/* Export */}
       <div className="flex flex-wrap gap-2 text-sm">
-        <a
-          href={exportAllHref}
-          className="inline-flex items-center gap-2 rounded-md border px-3 py-1 underline"
-        >
+        <a href={exportAllHref} className="inline-flex items-center gap-2 rounded-md border px-3 py-1 underline">
           Exportar CSV (todos{statusFilter ? ` - ${statusFilter}` : ""})
         </a>
-        <a
-          href={export30Href}
-          className="inline-flex items-center gap-2 rounded-md border px-3 py-1 underline"
-        >
+        <a href={export30Href} className="inline-flex items-center gap-2 rounded-md border px-3 py-1 underline">
           Exportar CSV (últimos 30 días{statusFilter ? ` - ${statusFilter}` : ""})
         </a>
       </div>
@@ -207,12 +158,8 @@ export default async function DashboardPage({ searchParams }: Props) {
               </div>
               <div className="flex items-center gap-3">
                 <OrderStatusActions orderId={o.id} initialStatus={o.status} />
-                <Link className="text-sm underline" href={`/dashboard/orders/${o.id}`}>
-                  Gestionar
-                </Link>
-                <Link className="text-sm underline" href={`/orders/${o.id}/confirmation`}>
-                  Ver
-                </Link>
+                <Link className="text-sm underline" href={`/dashboard/orders/${o.id}`}>Gestionar</Link>
+                <Link className="text-sm underline" href={`/orders/${o.id}/confirmation`}>Ver</Link>
               </div>
             </li>
           ))}
