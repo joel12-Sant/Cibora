@@ -1,11 +1,9 @@
-// src/app/api/orders/export/route.ts
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { OrderStatus, Role, Prisma } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
-  // 1) Auth + autorización
   const session = await auth();
   const user = session?.user as
     | { id: string; role: Role; tenantId: string | null }
@@ -14,14 +12,13 @@ export async function GET(req: NextRequest) {
   const MERCHANT_ROLES = new Set<Role>([
     Role.MERCHANT_OWNER,
     Role.MERCHANT_STAFF,
-    Role.ADMIN, // si quieres permitir admin
+    Role.ADMIN,
   ]);
 
   if (!user || !user.tenantId || !MERCHANT_ROLES.has(user.role)) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  // 2) Query params
   const { searchParams } = new URL(req.url);
   const statusParam = searchParams.get("status");
   const fromParam = searchParams.get("from");
@@ -35,7 +32,6 @@ export async function GET(req: NextRequest) {
   const fromDate = fromParam ? safeStartOfDay(fromParam) : undefined;
   const toDate = toParam ? safeEndOfDay(toParam) : undefined;
 
-  // 3) Filtro WHERE (👉 usar tipo de Prisma directamente)
   const where: Prisma.OrderWhereInput = {
     tenantId: user.tenantId ?? undefined,
     ...(status ? { status } : {}),
@@ -49,7 +45,6 @@ export async function GET(req: NextRequest) {
       : {}),
   };
 
-  // 4) Cargar pedidos + items
   const orders = await prisma.order.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -63,7 +58,6 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // 5) Construir CSV
   const rows: string[] = [];
   rows.push(
     [
@@ -115,7 +109,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// ---------- helpers ----------
 
 function csvEscape(v: string): string {
   const needsQuotes = /[",\n]/.test(v);

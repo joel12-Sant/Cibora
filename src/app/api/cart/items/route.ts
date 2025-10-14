@@ -1,4 +1,3 @@
-// src/app/api/cart/items/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -23,7 +22,6 @@ const deleteSchema = z.object({
   menuItemId: z.string().min(1),
 });
 
-// Crea/actualiza (UP-SERT) 1 item con QTY EXACTA (no suma)
 export async function POST(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;
@@ -41,7 +39,6 @@ export async function POST(req: NextRequest) {
     create: { userId, tenantId, status: "ACTIVE" },
   });
 
-  // Snapshot del MenuItem
   const mi = await prisma.menuItem.findFirst({
     where: { id: item.menuItemId, active: true, menu: { tenantId } },
     select: { id: true, name: true, price: true },
@@ -54,7 +51,6 @@ export async function POST(req: NextRequest) {
   });
 
   if (existing) {
-    // 👇 SET exacto (no sumamos)
     await prisma.cartItem.update({
       where: { id: existing.id },
       data: { qty: item.qty, name: mi.name, price: mi.price },
@@ -74,7 +70,6 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true }, { status: 200 });
 }
 
-// Ajusta cantidad exacta (set)
 export async function PUT(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;
@@ -106,7 +101,6 @@ export async function PUT(req: NextRequest) {
   return NextResponse.json({ ok: true }, { status: 200 });
 }
 
-// Elimina un item
 export async function DELETE(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;

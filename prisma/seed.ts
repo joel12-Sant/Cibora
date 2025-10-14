@@ -1,10 +1,8 @@
-// prisma/seed.ts
 import { PrismaClient, Role, TenantStatus, CartStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // --- Tenants (con imagen/descr) ---
   const tenants = await prisma.$transaction([
     prisma.tenant.create({
       data: {
@@ -34,14 +32,13 @@ async function main() {
 
   const [t1, t2, t3] = tenants;
 
-  // --- Usuarios ---
   const [merchantOwner, customer, courier] = await prisma.$transaction([
     prisma.user.create({
       data: {
         email: "owner@sol.local",
         name: "Owner Sol",
         role: Role.MERCHANT_OWNER,
-        tenantId: t1.id, // dueño del tenant 1
+        tenantId: t1.id, 
       },
     }),
     prisma.user.create({
@@ -62,7 +59,6 @@ async function main() {
     }),
   ]);
 
-  // --- Menú + Items Tenant 1 ---
   const menu1 = await prisma.menu.create({
     data: {
       tenantId: t1.id,
@@ -96,7 +92,6 @@ async function main() {
     include: { items: true },
   });
 
-  // --- Menú + Items Tenant 2 ---
   const menu2 = await prisma.menu.create({
     data: {
       tenantId: t2.id,
@@ -123,7 +118,6 @@ async function main() {
     include: { items: true },
   });
 
-  // --- Menú + Items Tenant 3 ---
   const menu3 = await prisma.menu.create({
     data: {
       tenantId: t3.id,
@@ -150,8 +144,6 @@ async function main() {
     include: { items: true },
   });
 
-  // --- Carrito de ejemplo (cliente en tenant 1) ---
-  // Un carrito ACTIVO por user/tenant
   const cart = await prisma.cart.upsert({
     where: {
       userId_tenantId_status: {
@@ -168,7 +160,6 @@ async function main() {
     },
   });
 
-  // Agrega dos ítems del menú 1 al carrito
   if (menu1.items.length >= 2) {
     await prisma.cartItem.createMany({
       data: [

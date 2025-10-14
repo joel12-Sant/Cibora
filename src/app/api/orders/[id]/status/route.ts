@@ -1,10 +1,8 @@
-// src/app/api/orders/[id]/status/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { OrderStatus, Role } from "@prisma/client";
 
-// 👇 OJO: aquí el tipo de params es Promise<{ id: string }>
 type Ctx = { params: Promise<{ id: string }> };
 
 const ALLOWED_NEXT: Record<OrderStatus, OrderStatus[]> = {
@@ -19,7 +17,7 @@ const ALLOWED_NEXT: Record<OrderStatus, OrderStatus[]> = {
 const MERCHANT_ROLES = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF]);
 
 export async function PATCH(req: NextRequest, ctx: Ctx): Promise<NextResponse> {
-  const { id } = await ctx.params; // 👈 extraer params con await
+  const { id } = await ctx.params;
 
   const session = await auth();
   const user = session?.user as

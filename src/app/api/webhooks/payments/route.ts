@@ -22,7 +22,6 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
   try {
-    // ⚠️ Leer el cuerpo crudo para verificar la firma
     const raw = await req.text();
     event = stripe.webhooks.constructEvent(raw, sig, secret);
   } catch {
@@ -38,11 +37,9 @@ export async function POST(req: NextRequest) {
           typeof pi.metadata?.order_id === "string" ? pi.metadata.order_id : "";
 
         if (!orderId) {
-          // Evitamos hard-fail para que Stripe no reintente infinito
           return NextResponse.json({ received: true, note: "missing_order_id" });
         }
 
-        // Idempotencia simple: si ya marcamos este intent como SUCCEEDED, salimos
         const already = await prisma.payment.findFirst({
           where: { provider: "stripe", intentId, status: "SUCCEEDED" },
           select: { id: true },
@@ -52,7 +49,6 @@ export async function POST(req: NextRequest) {
         }
 
         await prisma.$transaction(async (tx) => {
-          // Upsert del pago
           const prev = await tx.payment.findFirst({
             where: { provider: "stripe", intentId },
             select: { id: true },
@@ -106,7 +102,6 @@ export async function POST(req: NextRequest) {
               });
             }
           } catch {
-            // Si aún no hay modelo Cart en algún entorno, no rompemos el webhook
           }
         });
 
@@ -132,7 +127,6 @@ export async function POST(req: NextRequest) {
       }
 
       default:
-        // Otros eventos: aceptamos para no generar reintentos
         return NextResponse.json({ received: true, ignored: event.type });
     }
   } catch {

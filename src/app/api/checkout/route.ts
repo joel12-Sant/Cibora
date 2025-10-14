@@ -1,4 +1,3 @@
-// src/app/api/checkout/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -26,9 +25,6 @@ export async function POST(req: NextRequest) {
 
     if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
     if (order.userId !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-    // Determina el monto en centavos (soporta DB en pesos o en centavos)
-    // Si total ya es "grande" (>= $10 * 100), asumimos que ya está en centavos; si no, convertimos desde pesos.
     const amountCents = order.total >= 1000 ? order.total : Math.round(order.total * 100);
 
     if (amountCents < 1000) {
@@ -40,7 +36,6 @@ export async function POST(req: NextRequest) {
 
     const stripe = getStripe();
 
-    // Busca si ya hay Payment para esta orden con Stripe
     const existing = await prisma.payment.findFirst({
       where: { orderId: order.id, provider: "stripe" },
       select: { id: true, intentId: true, status: true },
@@ -48,13 +43,11 @@ export async function POST(req: NextRequest) {
 
     let intent;
     if (existing?.intentId) {
-      // UPDATE: SOLO campos actualizables (NO currency, NO automatic_payment_methods)
       intent = await stripe.paymentIntents.update(existing.intentId, {
         amount: amountCents,
         metadata: { order_id: order.id, tenant_id: order.tenantId ?? "" },
       });
     } else {
-      // CREATE: aquí sí se puede usar automatic_payment_methods y currency
       intent = await stripe.paymentIntents.create({
         amount: amountCents,
         currency: "mxn",
@@ -62,13 +55,10 @@ export async function POST(req: NextRequest) {
         automatic_payment_methods: { enabled: true },
       });
 
-      // Creamos registro Payment si no existía
       await prisma.payment.create({
         data: { orderId: order.id, provider: "stripe", status: "PENDING", intentId: intent.id },
       });
     }
-
-    // Si existía, mantenemos el registro sincronizado
     if (existing) {
       await prisma.payment.update({
         where: { id: existing.id },

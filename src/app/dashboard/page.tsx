@@ -72,7 +72,6 @@ export default async function DashboardPage({ searchParams }: Props) {
       : {}),
   };
 
-  // Conteos por estado (chips)
   const counts = await prisma.order.groupBy({
     by: ["status"],
     where: { tenantId: user.tenantId },

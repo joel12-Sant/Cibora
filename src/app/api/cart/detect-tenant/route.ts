@@ -1,15 +1,8 @@
-// src/app/api/cart/detect-tenant/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { z } from "zod";
 
-/**
- * POST /api/cart/detect-tenant
- * Body: { items: [{ menuItemId: string }] }
- * Devuelve { tenantId } si todos los items pertenecen al MISMO tenant y están activos.
- * Requiere sesión (para evitar uso indebido).
- */
 const detectSchema = z.object({
   items: z
     .array(z.object({ menuItemId: z.string().min(1) }))

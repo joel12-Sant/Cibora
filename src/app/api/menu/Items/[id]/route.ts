@@ -14,14 +14,12 @@ export async function PATCH(
   const session = await auth();
   const user = (session?.user as SessionUser) ?? null;
 
-  // ✅ usa Set<Role> para evitar el error de tipos con includes
   const ALLOWED = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF]);
 
   if (!user || !user.tenantId || !ALLOWED.has(user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Asegura que el item pertenece al tenant del usuario
   const item = await prisma.menuItem.findFirst({
     where: { id, menu: { tenantId: user.tenantId } },
     select: { id: true, active: true },
