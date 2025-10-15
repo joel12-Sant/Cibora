@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { Role } from "@prisma/client";
 import { redirect } from "next/navigation";
-import NewItemModal from "./NexItemModal";
+import NewItemModal from "./NewItemModal";
 import ItemsTable from "../ItemsTable";
 
 export default async function MenuPage() {

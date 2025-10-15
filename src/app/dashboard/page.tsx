@@ -63,12 +63,12 @@ export default async function DashboardPage({ searchParams }: Props) {
       : {}),
     ...(qParam
       ? {
-          OR: [
-            { id: { startsWith: qParam } },
-            { user: { email: { contains: qParam, mode: "insensitive" } } },
-            { items: { some: { name: { contains: qParam, mode: "insensitive" } } } },
-          ],
-        }
+        OR: [
+          { id: { startsWith: qParam } },
+          { user: { email: { contains: qParam, mode: "insensitive" } } },
+          { items: { some: { name: { contains: qParam, mode: "insensitive" } } } },
+        ],
+      }
       : {}),
   };
 
@@ -167,7 +167,15 @@ export default async function DashboardPage({ searchParams }: Props) {
       </section>
 
       <section>
-        <h2 className="mb-2 font-medium">Menú</h2>
+        <div className="flex items-center justify-between p-4">
+          <h2 className="mb-2 font-medium">Menú</h2>
+          <Link
+            href="/dashboard/menu"
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            Gestionar menú
+          </Link>
+        </div>
         <ItemsTable items={items} />
       </section>
     </main>

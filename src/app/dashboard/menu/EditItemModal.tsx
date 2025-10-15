@@ -1,8 +1,9 @@
 // src/app/dashboard/menu/EditItemModal.tsx
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { uploadImage } from "@/lib/uploads";
 
 type Props = {
   item: {
@@ -21,9 +22,30 @@ export default function EditItemModal({ item }: Props) {
   const [price, setPrice] = useState<number | "">(item.price);
   const [active, setActive] = useState(item.active);
   const [imageUrl, setImageUrl] = useState(item.imageUrl ?? "");
+  const [file, setFile] = useState<File | null>(null);
   const [description, setDescription] = useState(item.description ?? "");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const router = useRouter();
+
+  const preview = useMemo(() => {
+    if (file) return URL.createObjectURL(file);
+    if (imageUrl) return imageUrl;
+    return "";
+  }, [file, imageUrl]);
+
+  async function onUpload() {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { url } = await uploadImage(file);
+      setImageUrl(url);
+    } catch {
+      alert("No se pudo subir la imagen");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -102,14 +124,43 @@ export default function EditItemModal({ item }: Props) {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm">Imagen (URL)</label>
-                <input
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
-                  placeholder="https://..."
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                />
+              <div className="space-y-2">
+                <label className="block text-sm">Imagen</label>
+                {preview ? (
+                  <img
+                    src={preview}
+                    alt="preview"
+                    className="h-24 w-24 rounded-lg object-cover ring-1 ring-gray-200"
+                  />
+                ) : null}
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                  <button
+                    type="button"
+                    onClick={onUpload}
+                    disabled={!file || uploading}
+                    className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {uploading ? "Subiendo..." : "Subir"}
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-500">
+                    o pega una URL (opcional)
+                  </label>
+                  <input
+                    className="mt-1 w-full rounded-lg border px-3 py-2"
+                    placeholder="https://..."
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div>

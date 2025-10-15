@@ -1,8 +1,9 @@
 // src/app/dashboard/menu/NewItemModal.tsx
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { uploadImage } from "@/lib/uploads";
 
 export default function NewItemModal() {
   const [open, setOpen] = useState(false);
@@ -10,9 +11,30 @@ export default function NewItemModal() {
   const [price, setPrice] = useState<number | "">("");
   const [active, setActive] = useState(true);
   const [imageUrl, setImageUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const router = useRouter();
+
+  const preview = useMemo(() => {
+    if (file) return URL.createObjectURL(file);
+    if (imageUrl) return imageUrl;
+    return "";
+  }, [file, imageUrl]);
+
+  async function onUpload() {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { url } = await uploadImage(file);
+      setImageUrl(url);
+    } catch (e) {
+      alert("No se pudo subir la imagen");
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -39,6 +61,7 @@ export default function NewItemModal() {
       setPrice("");
       setActive(true);
       setImageUrl("");
+      setFile(null);
       setDescription("");
       router.refresh();
     } finally {
@@ -96,14 +119,43 @@ export default function NewItemModal() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm">Imagen (URL)</label>
-                <input
-                  className="mt-1 w-full rounded-lg border px-3 py-2"
-                  placeholder="https://..."
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                />
+              <div className="space-y-2">
+                <label className="block text-sm">Imagen</label>
+                {preview ? (
+                  <img
+                    src={preview}
+                    alt="preview"
+                    className="h-24 w-24 rounded-lg object-cover ring-1 ring-gray-200"
+                  />
+                ) : null}
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                  />
+                  <button
+                    type="button"
+                    onClick={onUpload}
+                    disabled={!file || uploading}
+                    className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {uploading ? "Subiendo..." : "Subir"}
+                  </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-500">
+                    o pega una URL (opcional)
+                  </label>
+                  <input
+                    className="mt-1 w-full rounded-lg border px-3 py-2"
+                    placeholder="https://..."
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div>
