@@ -1,45 +1,74 @@
+// src/app/dashboard/ItemsTable.tsx
 "use client";
-import { useState } from "react";
 
-type Item = { id: string; name: string; price: number; active: boolean };
+import { useRouter } from "next/navigation";
+import EditItemModal from "./menu/EditItemModal";
 
-export default function ItemsTable({ items: initial }: { items: Item[] }) {
-  const [items, setItems] = useState(initial);
+type Item = {
+  id: string;
+  name: string;
+  price: number;
+  active: boolean;
+  imageUrl?: string | null;
+  description?: string | null;
+};
 
-  async function toggle(id: string) {
-    const prev = items;
-    const idx = items.findIndex(i => i.id === id);
-    if (idx < 0) return;
+export default function ItemsTable({ items }: { items: Item[] }) {
+  const router = useRouter();
 
-    const copy = [...items];
-    copy[idx] = { ...copy[idx], active: !copy[idx].active };
-    setItems(copy);
-
+  async function toggleActive(id: string) {
     const res = await fetch(`/api/menu/items/${id}`, { method: "PATCH" });
     if (!res.ok) {
-      // rollback si falla
-      setItems(prev);
-      alert("No se pudo actualizar el ítem");
+      const data = await res.json().catch(() => ({}));
+      alert(data?.error ?? "No se pudo actualizar el ítem");
+      return;
     }
+    router.refresh();
+  }
+
+  async function removeItem(id: string) {
+    if (!confirm("¿Eliminar este ítem? Esta acción no se puede deshacer.")) return;
+    const res = await fetch(`/api/menu/items/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data?.error ?? "No se pudo eliminar el ítem");
+      return;
+    }
+    router.refresh();
   }
 
   return (
-    <ul className="divide-y rounded-xl border">
-      {items.map(i => (
-        <li key={i.id} className="flex items-center justify-between p-3">
-          <div>
-            <p className="font-medium">{i.name}</p>
-            <p className="text-sm opacity-70">${i.price} MXN</p>
+    <div className="divide-y rounded-2xl border">
+      {items.length === 0 && (
+        <div className="p-4 text-sm text-gray-500">No hay ítems todavía.</div>
+      )}
+
+      {items.map((it) => (
+        <div key={it.id} className="flex items-center justify-between p-4">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium">{it.name}</div>
+            <div className="truncate text-xs text-gray-500">
+              ${it.price} MXN {it.active ? "• Activo" : "• Inactivo"}
+            </div>
           </div>
-          <button
-            className="rounded border px-3 py-1.5 hover:bg-white/5"
-            onClick={() => toggle(i.id)}
-          >
-            {i.active ? "Desactivar" : "Activar"}
-          </button>
-        </li>
+
+          <div className="flex items-center gap-2">
+            <EditItemModal item={it} />
+            <button
+              onClick={() => toggleActive(it.id)}
+              className="rounded-xl border px-2 py-1 text-xs hover:bg-gray-50"
+            >
+              {it.active ? "Desactivar" : "Activar"}
+            </button>
+            <button
+              onClick={() => removeItem(it.id)}
+              className="rounded-xl border px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+            >
+              Eliminar
+            </button>
+          </div>
+        </div>
       ))}
-      {items.length === 0 && <li className="p-3 opacity-70">Sin items.</li>}
-    </ul>
+    </div>
   );
 }
