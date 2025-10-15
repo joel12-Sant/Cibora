@@ -7,25 +7,24 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getStripe } from "@/lib/stripe";
 import { toStripeAmount } from "@/lib/money";
+import type Stripe from "stripe";
 
 const PROVIDER = "stripe";
 
 export async function POST(req: Request) {
   const stripe = await getStripe();
 
-  // 👇 headers() es async en tu proyecto
   const hdrs = await headers();
   const sig = hdrs.get("stripe-signature");
 
   if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) {
     console.error("[webhook] missing signature or secret");
     return new NextResponse("Bad Request", { status: 400 });
-    }
+  }
 
-  // Leer cuerpo crudo para validar firma
   const buf = await req.arrayBuffer();
 
-  let event: any;
+  let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(
       Buffer.from(buf),
@@ -37,7 +36,6 @@ export async function POST(req: Request) {
     return new NextResponse("Invalid signature", { status: 400 });
   }
 
-  // Procesamos PI events (succeeded/failed/processing/etc.)
   if (
     event.type === "payment_intent.succeeded" ||
     event.type === "payment_intent.payment_failed" ||
@@ -45,31 +43,26 @@ export async function POST(req: Request) {
     event.type === "payment_intent.canceled" ||
     event.type === "payment_intent.requires_action"
   ) {
-    const pi = event.data.object as any; // Stripe.PaymentIntent (evitamos importar tipos)
-    const orderId = pi?.metadata?.order_id as string | undefined;
+    const pi = event.data.object as Stripe.PaymentIntent;
+    const orderId = (pi.metadata?.order_id as string | undefined) ?? undefined;
 
     if (!orderId) {
       console.warn("[webhook] No order_id in metadata");
       return NextResponse.json({ ok: true });
     }
 
-    // Traer orden (fuente de verdad del total en PESOS)
     const order = await prisma.order.findFirst({
       where: { id: orderId },
     });
-
     if (!order) {
       console.warn("[webhook] Order not found:", orderId);
       return NextResponse.json({ ok: true });
     }
 
-    // Validar monto (centavos)
     const expectedCents = toStripeAmount(order.total);
-    const piAmount: number | undefined =
-      typeof pi?.amount === "number" ? pi.amount : undefined;
+    const piAmount: number | undefined = typeof pi.amount === "number" ? pi.amount : undefined;
 
     if (piAmount !== undefined && piAmount !== expectedCents) {
-      // No abortamos para no colgar pagos; dejamos traza en Payment.extRef
       console.error("[webhook] PI amount mismatch", {
         orderId,
         expectedCents,
@@ -83,7 +76,6 @@ export async function POST(req: Request) {
       });
     }
 
-    // Resolver/crear registro Payment por seguridad (idempotente)
     let payment = await prisma.payment.findFirst({
       where: { orderId, provider: PROVIDER },
     });
@@ -93,21 +85,24 @@ export async function POST(req: Request) {
         data: {
           orderId,
           provider: PROVIDER,
-          intentId: pi?.id ?? null,
+          intentId: pi.id ?? null,
           status: "PENDING",
-          extRef: pi?.latest_charge ?? null,
+          extRef: (pi.latest_charge as string) ?? null,
         },
       });
-    } else if (!payment.intentId && pi?.id) {
-      // Rellenar intentId si faltaba
+    } else if (!payment.intentId && pi.id) {
       await prisma.payment.update({
         where: { id: payment.id },
         data: { intentId: pi.id },
       });
     }
 
-    // Mapear estado
-    const statusFromEvent =
+    const statusFromEvent:
+      | "SUCCEEDED"
+      | "FAILED"
+      | "PROCESSING"
+      | "CANCELED"
+      | "REQUIRES_ACTION" =
       event.type === "payment_intent.succeeded"
         ? "SUCCEEDED"
         : event.type === "payment_intent.payment_failed"
@@ -118,7 +113,6 @@ export async function POST(req: Request) {
         ? "CANCELED"
         : "REQUIRES_ACTION";
 
-    // Idempotencia: solo mover a PAID si aún no está
     if (statusFromEvent === "SUCCEEDED") {
       if (order.status !== "PAID") {
         await prisma.$transaction([
@@ -126,8 +120,8 @@ export async function POST(req: Request) {
             where: { orderId, provider: PROVIDER },
             data: {
               status: "SUCCEEDED",
-              intentId: pi?.id ?? undefined,
-              extRef: pi?.latest_charge ?? undefined,
+              intentId: pi.id ?? undefined,
+              extRef: (pi.latest_charge as string) ?? undefined,
             },
           }),
           prisma.order.update({
@@ -136,24 +130,22 @@ export async function POST(req: Request) {
           }),
         ]);
       } else {
-        // Ya estaba PAID: actualizamos payment por consistencia
         await prisma.payment.updateMany({
           where: { orderId, provider: PROVIDER },
           data: {
             status: "SUCCEEDED",
-            intentId: pi?.id ?? undefined,
-            extRef: pi?.latest_charge ?? undefined,
+            intentId: pi.id ?? undefined,
+            extRef: (pi.latest_charge as string) ?? undefined,
           },
         });
       }
     } else {
-      // Otros estados: registra el estado del payment (no cambiamos Order aquí)
       await prisma.payment.updateMany({
         where: { orderId, provider: PROVIDER },
         data: {
           status: statusFromEvent,
-          intentId: pi?.id ?? undefined,
-          extRef: pi?.latest_charge ?? undefined,
+          intentId: pi.id ?? undefined,
+          extRef: (pi.latest_charge as string) ?? undefined,
         },
       });
     }

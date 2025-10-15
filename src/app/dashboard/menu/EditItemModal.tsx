@@ -1,9 +1,9 @@
-// src/app/dashboard/menu/EditItemModal.tsx
 "use client";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { uploadImage } from "@/lib/uploads";
+import Image from "next/image";
 
 type Props = {
   item: {
@@ -127,9 +127,11 @@ export default function EditItemModal({ item }: Props) {
               <div className="space-y-2">
                 <label className="block text-sm">Imagen</label>
                 {preview ? (
-                  <img
+                  <Image
                     src={preview}
                     alt="preview"
+                    width={96}
+                    height={96}
                     className="h-24 w-24 rounded-lg object-cover ring-1 ring-gray-200"
                   />
                 ) : null}
@@ -151,9 +153,7 @@ export default function EditItemModal({ item }: Props) {
                 </div>
 
                 <div>
-                  <label className="block text-xs text-gray-500">
-                    o pega una URL (opcional)
-                  </label>
+                  <label className="block text-xs text-gray-500">o pega una URL (opcional)</label>
                   <input
                     className="mt-1 w-full rounded-lg border px-3 py-2"
                     placeholder="https://..."

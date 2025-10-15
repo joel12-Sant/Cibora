@@ -25,7 +25,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // 2) Items de la orden
+    // 2) Items por separado
     const orderItems = await prisma.orderItem.findMany({
       where: { orderId: order.id },
       select: { price: true, qty: true },
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
     const computedTotal = orderItems.reduce((acc, it) => acc + it.price * it.qty, 0);
 
-    // 3) Corrige total en BD si difiere
+    // 3) Corrige total si difiere
     const updatedOrder =
       order.total === computedTotal
         ? order
@@ -42,20 +42,19 @@ export async function POST(req: Request) {
             data: { total: computedTotal },
           });
 
-    // 4) Monto en centavos para Stripe
+    // 4) Centavos
     const amountCents = toStripeAmount(updatedOrder.total);
 
-    // 5) Payment existente por orderId
-    let payment = await prisma.payment.findFirst({
+    // 5) Payment existente (por proveedor stripe)
+    const payment = await prisma.payment.findFirst({
       where: { orderId: updatedOrder.id, provider: "stripe" },
     });
 
-      const stripe = await getStripe();
-
+    const stripe = await getStripe();
     let intentId: string | null = null;
 
     if (payment?.intentId) {
-      // Actualiza el PaymentIntent existente
+      // Update PI
       await stripe.paymentIntents.update(payment.intentId, {
         amount: amountCents,
         metadata: {
@@ -65,7 +64,7 @@ export async function POST(req: Request) {
       });
       intentId = payment.intentId;
     } else {
-      // Crea un PaymentIntent nuevo
+      // Create PI
       const created = await stripe.paymentIntents.create({
         amount: amountCents,
         currency: "mxn",
@@ -75,7 +74,6 @@ export async function POST(req: Request) {
           tenant_id: updatedOrder.tenantId ?? "",
         },
       });
-
       intentId = created.id;
 
       if (payment) {
@@ -95,7 +93,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // Recupera SIEMPRE el PI para leer client_secret
+    // 6) Recupera clientSecret
     const current = await stripe.paymentIntents.retrieve(intentId!);
 
     return NextResponse.json({
@@ -106,8 +104,10 @@ export async function POST(req: Request) {
       amountCents,                  // centavos
       clientSecret: current.client_secret,
     });
-  } catch (err) {
-    console.error("[/api/checkout] error:", err);
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Checkout error";
+    console.error("[/api/checkout] error:", message);
     return NextResponse.json({ error: "Checkout error" }, { status: 500 });
   }
 }

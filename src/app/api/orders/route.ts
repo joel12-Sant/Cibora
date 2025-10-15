@@ -1,4 +1,3 @@
-// src/app/api/orders/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -7,14 +6,6 @@ import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { CartStatus, OrderStatus } from "@prisma/client";
 
-/**
- * Crea una Order a partir del carrito ACTIVE del (userId, tenantId).
- * Body: { tenantId?: string }
- * - Montos en BD: PESOS enteros (no centavos).
- * - OrderItem snapshot: { itemId, name, price, qty }.
- * - Alternativa 2: elimina CONVERTED previos (userId, tenantId) para respetar el índice único.
- * - Si no se envía tenantId y hay exactamente 1 carrito ACTIVE => se infiere.
- */
 export async function POST(req: Request) {
   try {
     const session = await auth();
@@ -26,7 +17,7 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     let tenantId = (body?.tenantId as string | undefined) ?? null;
 
-    // Inferir tenantId si no viene y hay exactamente 1 carrito ACTIVE
+    // Inferir tenantId si no viene y hay un único carrito ACTIVE
     if (!tenantId) {
       const activeTenants = await prisma.cart.findMany({
         where: { userId, status: CartStatus.ACTIVE },
@@ -44,16 +35,15 @@ export async function POST(req: Request) {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1) Carrito ACTIVE con items (snapshot desde aquí)
       const cart = await tx.cart.findFirst({
         where: { userId, tenantId, status: CartStatus.ACTIVE },
         select: {
           id: true,
           items: {
             select: {
-              menuItemId: true, // CartItem.menuItemId
+              menuItemId: true,
               name: true,
-              price: true, // PESOS
+              price: true,
               qty: true,
             },
           },
@@ -64,38 +54,33 @@ export async function POST(req: Request) {
         throw new Error("No hay un carrito activo con ítems para este tenant.");
       }
 
-      // 2) Total en PESOS
       const total = cart.items.reduce((acc, it) => acc + it.price * it.qty, 0);
 
-      // 3) Crear ORDER (sin items aún)
       const order = await tx.order.create({
         data: {
           userId,
-          tenantId: tenantId!, // ya garantizado
+          tenantId: tenantId!,
           status: OrderStatus.CREATED,
-          total, // PESOS
+          total,
         },
         select: { id: true, status: true, total: true },
       });
 
-      // 4) Insertar ORDER ITEMS con createMany (map: menuItemId -> itemId)
       await tx.orderItem.createMany({
         data: cart.items.map((it) => ({
           orderId: order.id,
-          itemId: it.menuItemId, // 👈 en OrderItem se llama itemId
+          itemId: it.menuItemId,
           name: it.name,
-          price: it.price, // PESOS
+          price: it.price,
           qty: it.qty,
         })),
         skipDuplicates: false,
       });
 
-      // 5) Eliminar carritos CONVERTED previos (evita colisión única)
       await tx.cart.deleteMany({
         where: { userId, tenantId: tenantId!, status: CartStatus.CONVERTED },
       });
 
-      // 6) Convertir el ACTIVE actual → CONVERTED
       await tx.cart.updateMany({
         where: { userId, tenantId: tenantId!, status: CartStatus.ACTIVE },
         data: { status: CartStatus.CONVERTED },
@@ -108,8 +93,9 @@ export async function POST(req: Request) {
       { ok: true, orderId: result.id, status: result.status, total: result.total },
       { status: 201 }
     );
-  } catch (err: any) {
-    console.error("[POST /api/orders] error:", err?.code ?? err?.message ?? err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[POST /api/orders] error:", message);
     return NextResponse.json({ error: "No se pudo crear la orden" }, { status: 500 });
   }
 }
