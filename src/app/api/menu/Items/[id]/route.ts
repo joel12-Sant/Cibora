@@ -1,15 +1,17 @@
-// src/app/api/menu/items/[id]/route.ts
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { Role } from "@prisma/client";
 import { z } from "zod";
 
-type SessionUser = { id: string; role: Role; tenantId: string | null };
+type SessionUser = { id?: string; role?: Role | string | null; tenantId?: string | null };
 
 const patchSchema = z.object({
   name: z.string().min(1).optional(),
-  price: z.number().int().nonnegative().optional(),
+  price: z.coerce.number().int().nonnegative().optional(),
   active: z.boolean().optional(),
   imageUrl: z.string().url().optional().or(z.literal("").transform(() => undefined)),
   description: z.string().max(500).optional().or(z.literal("").transform(() => undefined)),
@@ -17,18 +19,20 @@ const patchSchema = z.object({
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // 👈 Promise
 ) {
+  const { id } = await params; // 👈 await
+
   const session = await auth();
   const user = (session?.user as SessionUser) ?? null;
-
   const allowed = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN]);
-  if (!user || !user.tenantId || !allowed.has(user.role)) {
+
+  if (!user?.tenantId || !user.role || !allowed.has(user.role as Role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const item = await prisma.menuItem.findFirst({
-    where: { id: params.id, menu: { tenantId: user.tenantId } },
+    where: { id, menu: { tenantId: user.tenantId } },
     select: { id: true, active: true },
   });
   if (!item) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -40,15 +44,10 @@ export async function PATCH(
   }
 
   const data = parsed.data;
-
-  // Si no se mandó ningún campo, considerar toggle de active como fallback:
-  const updateData =
-    Object.keys(data).length === 0
-      ? { active: !item.active }
-      : data;
+  const updateData = Object.keys(data).length === 0 ? { active: !item.active } : data;
 
   const updated = await prisma.menuItem.update({
-    where: { id: params.id },
+    where: { id },
     data: updateData,
     select: { id: true, name: true, price: true, active: true, imageUrl: true, description: true },
   });
@@ -58,25 +57,24 @@ export async function PATCH(
 
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> } // 👈 Promise
 ) {
+  const { id } = await params; // 👈 await
+
   const session = await auth();
   const user = (session?.user as SessionUser) ?? null;
-
   const allowed = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF, Role.ADMIN]);
-  if (!user || !user.tenantId || !allowed.has(user.role)) {
+
+  if (!user?.tenantId || !user.role || !allowed.has(user.role as Role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // verificar pertenencia al tenant
   const owned = await prisma.menuItem.findFirst({
-    where: { id: params.id, menu: { tenantId: user.tenantId } },
+    where: { id, menu: { tenantId: user.tenantId } },
     select: { id: true },
   });
   if (!owned) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Hard-delete (documentado)
-  await prisma.menuItem.delete({ where: { id: params.id } });
-
+  await prisma.menuItem.delete({ where: { id } });
   return NextResponse.json({ ok: true }, { status: 200 });
 }
