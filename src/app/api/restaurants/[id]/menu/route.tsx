@@ -7,8 +7,8 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params; 
-  
+  const { id } = await params;
+
   const menu = await prisma.menu.findFirst({
     where: { tenantId: id },
     select: { id: true },
@@ -17,7 +17,7 @@ export async function GET(
   if (!menu) return NextResponse.json({ items: [] });
 
   const items = await prisma.menuItem.findMany({
-    where: { menuId: menu.id },
+    where: { menuId: menu.id, active: true }, // ← filtro para público
     select: { id: true, name: true, price: true, active: true },
     orderBy: { name: "asc" },
   });
