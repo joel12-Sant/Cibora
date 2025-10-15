@@ -1,74 +1,113 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { getStripe } from "@/lib/stripe";
+import { toStripeAmount } from "@/lib/money";
 
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   try {
     const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    const userId = session?.user?.id as string | undefined;
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { orderId } = (await req.json().catch(() => ({}))) as { orderId?: string };
-    if (!orderId) {
-      return NextResponse.json({ error: "orderId requerido" }, { status: 400 });
+    const { orderId } = await req.json();
+
+    // 1) Orden
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, userId },
+    });
+    if (!order) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: { id: true, userId: true, tenantId: true, status: true, total: true },
+    // 2) Items de la orden
+    const orderItems = await prisma.orderItem.findMany({
+      where: { orderId: order.id },
+      select: { price: true, qty: true },
     });
 
-    if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
-    if (order.userId !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    const amountCents = order.total >= 1000 ? order.total : Math.round(order.total * 100);
+    const computedTotal = orderItems.reduce((acc, it) => acc + it.price * it.qty, 0);
 
-    if (amountCents < 1000) {
-      return NextResponse.json(
-        { error: "El monto mínimo de pago es $10.00 MXN. Ajusta tu carrito." },
-        { status: 400 },
-      );
-    }
+    // 3) Corrige total en BD si difiere
+    const updatedOrder =
+      order.total === computedTotal
+        ? order
+        : await prisma.order.update({
+            where: { id: order.id },
+            data: { total: computedTotal },
+          });
 
-    const stripe = getStripe();
+    // 4) Monto en centavos para Stripe
+    const amountCents = toStripeAmount(updatedOrder.total);
 
-    const existing = await prisma.payment.findFirst({
-      where: { orderId: order.id, provider: "stripe" },
-      select: { id: true, intentId: true, status: true },
+    // 5) Payment existente por orderId
+    let payment = await prisma.payment.findFirst({
+      where: { orderId: updatedOrder.id, provider: "stripe" },
     });
 
-    let intent;
-    if (existing?.intentId) {
-      intent = await stripe.paymentIntents.update(existing.intentId, {
+      const stripe = await getStripe();
+
+    let intentId: string | null = null;
+
+    if (payment?.intentId) {
+      // Actualiza el PaymentIntent existente
+      await stripe.paymentIntents.update(payment.intentId, {
         amount: amountCents,
-        metadata: { order_id: order.id, tenant_id: order.tenantId ?? "" },
+        metadata: {
+          order_id: updatedOrder.id,
+          tenant_id: updatedOrder.tenantId ?? "",
+        },
       });
+      intentId = payment.intentId;
     } else {
-      intent = await stripe.paymentIntents.create({
+      // Crea un PaymentIntent nuevo
+      const created = await stripe.paymentIntents.create({
         amount: amountCents,
         currency: "mxn",
-        metadata: { order_id: order.id, tenant_id: order.tenantId ?? "" },
         automatic_payment_methods: { enabled: true },
+        metadata: {
+          order_id: updatedOrder.id,
+          tenant_id: updatedOrder.tenantId ?? "",
+        },
       });
 
-      await prisma.payment.create({
-        data: { orderId: order.id, provider: "stripe", status: "PENDING", intentId: intent.id },
-      });
-    }
-    if (existing) {
-      await prisma.payment.update({
-        where: { id: existing.id },
-        data: { intentId: intent.id, status: existing.status === "SUCCEEDED" ? "SUCCEEDED" : "PENDING" },
-      });
+      intentId = created.id;
+
+      if (payment) {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { intentId },
+        });
+      } else {
+        await prisma.payment.create({
+          data: {
+            provider: "stripe",
+            orderId: updatedOrder.id,
+            intentId,
+            status: "PENDING",
+          },
+        });
+      }
     }
 
-    return NextResponse.json({ clientSecret: intent.client_secret });
-  } catch (e) {
-    console.error("checkout error:", e);
-    return NextResponse.json({ error: "Error al preparar el pago" }, { status: 500 });
+    // Recupera SIEMPRE el PI para leer client_secret
+    const current = await stripe.paymentIntents.retrieve(intentId!);
+
+    return NextResponse.json({
+      ok: true,
+      orderId: updatedOrder.id,
+      intentId,
+      amount: updatedOrder.total,   // pesos
+      amountCents,                  // centavos
+      clientSecret: current.client_secret,
+    });
+  } catch (err) {
+    console.error("[/api/checkout] error:", err);
+    return NextResponse.json({ error: "Checkout error" }, { status: 500 });
   }
 }

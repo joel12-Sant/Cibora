@@ -153,7 +153,7 @@ export default function CartPage() {
               <QtyControl
                 value={it.qty}
                 onChange={(q) => {
-                  setQty(it.id, q);          // local
+                  setQty(it.id, q);           // local
                   syncQtyWithServer(it.id, q); // servidor (si hay sesión)
                 }}
               />
@@ -192,13 +192,14 @@ export default function CartPage() {
             setCreating(true);
             setMsg(null);
             try {
-              // Tu API espera { items: [{ id, qty }] }
-              const payload = { items: items.map((it) => ({ id: it.id, qty: it.qty })) };
+              // Obtén tenantId local; si no existe, el backend intentará inferirlo.
+              const tenantId = getLocalTenantId();
 
               const res = await fetch("/api/orders", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify(payload),
+                // Enviamos tenantId explícito si lo tenemos (más robusto)
+                body: JSON.stringify(tenantId ? { tenantId } : {}),
                 cache: "no-store",
               });
 

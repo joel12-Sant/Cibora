@@ -1,135 +1,163 @@
+// src/app/api/webhooks/payments/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/db";
 import { getStripe } from "@/lib/stripe";
-import type Stripe from "stripe";
-import { CartStatus, OrderStatus } from "@prisma/client";
+import { toStripeAmount } from "@/lib/money";
 
-export async function POST(req: NextRequest) {
-  const stripe = getStripe();
+const PROVIDER = "stripe";
 
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "Missing STRIPE_WEBHOOK_SECRET" }, { status: 500 });
-  }
+export async function POST(req: Request) {
+  const stripe = await getStripe();
 
-  const sig = req.headers.get("stripe-signature");
-  if (!sig) {
-    return NextResponse.json({ error: "Missing signature" }, { status: 400 });
-  }
+  // 👇 headers() es async en tu proyecto
+  const hdrs = await headers();
+  const sig = hdrs.get("stripe-signature");
 
-  let event: Stripe.Event;
-  try {
-    const raw = await req.text();
-    event = stripe.webhooks.constructEvent(raw, sig, secret);
-  } catch {
-    return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
-  }
-
-  try {
-    switch (event.type) {
-      case "payment_intent.succeeded": {
-        const pi = event.data.object as Stripe.PaymentIntent;
-        const intentId = pi.id;
-        const orderId =
-          typeof pi.metadata?.order_id === "string" ? pi.metadata.order_id : "";
-
-        if (!orderId) {
-          return NextResponse.json({ received: true, note: "missing_order_id" });
-        }
-
-        const already = await prisma.payment.findFirst({
-          where: { provider: "stripe", intentId, status: "SUCCEEDED" },
-          select: { id: true },
-        });
-        if (already) {
-          return NextResponse.json({ received: true, note: "already_processed" });
-        }
-
-        await prisma.$transaction(async (tx) => {
-          const prev = await tx.payment.findFirst({
-            where: { provider: "stripe", intentId },
-            select: { id: true },
-          });
-
-          if (prev) {
-            await tx.payment.update({
-              where: { id: prev.id },
-              data: { status: "SUCCEEDED", extRef: event.id },
-            });
-          } else {
-            await tx.payment.create({
-              data: {
-                orderId,
-                provider: "stripe",
-                status: "SUCCEEDED",
-                intentId,
-                extRef: event.id,
-              },
-            });
-          }
-
-          const order = await tx.order.findUnique({
-            where: { id: orderId },
-            select: { id: true, status: true, userId: true, tenantId: true },
-          });
-          if (!order) return;
-
-          if (order.status !== OrderStatus.PAID) {
-            await tx.order.update({
-              where: { id: order.id },
-              data: { status: OrderStatus.PAID },
-            });
-          }
-
-          try {
-            const cart = await tx.cart.findFirst({
-              where: {
-                userId: order.userId,
-                tenantId: order.tenantId,
-                status: { in: [CartStatus.ACTIVE, CartStatus.CONVERTED] },
-              },
-              orderBy: { updatedAt: "desc" },
-              select: { id: true, status: true },
-            });
-
-            if (cart && cart.status !== CartStatus.CONVERTED) {
-              await tx.cart.update({
-                where: { id: cart.id },
-                data: { status: CartStatus.CONVERTED },
-              });
-            }
-          } catch {
-          }
-        });
-
-        return NextResponse.json({ received: true });
-      }
-
-      case "payment_intent.payment_failed": {
-        const pi = event.data.object as Stripe.PaymentIntent;
-        const intentId = pi.id;
-
-        const prev = await prisma.payment.findFirst({
-          where: { provider: "stripe", intentId },
-          select: { id: true },
-        });
-
-        if (prev) {
-          await prisma.payment.update({
-            where: { id: prev.id },
-            data: { status: "FAILED", extRef: event.id },
-          });
-        }
-        return NextResponse.json({ received: true });
-      }
-
-      default:
-        return NextResponse.json({ received: true, ignored: event.type });
+  if (!sig || !process.env.STRIPE_WEBHOOK_SECRET) {
+    console.error("[webhook] missing signature or secret");
+    return new NextResponse("Bad Request", { status: 400 });
     }
-  } catch {
-    return NextResponse.json({ error: "Webhook error" }, { status: 500 });
+
+  // Leer cuerpo crudo para validar firma
+  const buf = await req.arrayBuffer();
+
+  let event: any;
+  try {
+    event = stripe.webhooks.constructEvent(
+      Buffer.from(buf),
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+  } catch (err) {
+    console.error("[webhook] invalid signature:", err);
+    return new NextResponse("Invalid signature", { status: 400 });
   }
+
+  // Procesamos PI events (succeeded/failed/processing/etc.)
+  if (
+    event.type === "payment_intent.succeeded" ||
+    event.type === "payment_intent.payment_failed" ||
+    event.type === "payment_intent.processing" ||
+    event.type === "payment_intent.canceled" ||
+    event.type === "payment_intent.requires_action"
+  ) {
+    const pi = event.data.object as any; // Stripe.PaymentIntent (evitamos importar tipos)
+    const orderId = pi?.metadata?.order_id as string | undefined;
+
+    if (!orderId) {
+      console.warn("[webhook] No order_id in metadata");
+      return NextResponse.json({ ok: true });
+    }
+
+    // Traer orden (fuente de verdad del total en PESOS)
+    const order = await prisma.order.findFirst({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      console.warn("[webhook] Order not found:", orderId);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Validar monto (centavos)
+    const expectedCents = toStripeAmount(order.total);
+    const piAmount: number | undefined =
+      typeof pi?.amount === "number" ? pi.amount : undefined;
+
+    if (piAmount !== undefined && piAmount !== expectedCents) {
+      // No abortamos para no colgar pagos; dejamos traza en Payment.extRef
+      console.error("[webhook] PI amount mismatch", {
+        orderId,
+        expectedCents,
+        piAmount,
+      });
+      await prisma.payment.updateMany({
+        where: { orderId, provider: PROVIDER },
+        data: {
+          extRef: `mismatch:${piAmount}->${expectedCents}`,
+        },
+      });
+    }
+
+    // Resolver/crear registro Payment por seguridad (idempotente)
+    let payment = await prisma.payment.findFirst({
+      where: { orderId, provider: PROVIDER },
+    });
+
+    if (!payment) {
+      payment = await prisma.payment.create({
+        data: {
+          orderId,
+          provider: PROVIDER,
+          intentId: pi?.id ?? null,
+          status: "PENDING",
+          extRef: pi?.latest_charge ?? null,
+        },
+      });
+    } else if (!payment.intentId && pi?.id) {
+      // Rellenar intentId si faltaba
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { intentId: pi.id },
+      });
+    }
+
+    // Mapear estado
+    const statusFromEvent =
+      event.type === "payment_intent.succeeded"
+        ? "SUCCEEDED"
+        : event.type === "payment_intent.payment_failed"
+        ? "FAILED"
+        : event.type === "payment_intent.processing"
+        ? "PROCESSING"
+        : event.type === "payment_intent.canceled"
+        ? "CANCELED"
+        : "REQUIRES_ACTION";
+
+    // Idempotencia: solo mover a PAID si aún no está
+    if (statusFromEvent === "SUCCEEDED") {
+      if (order.status !== "PAID") {
+        await prisma.$transaction([
+          prisma.payment.updateMany({
+            where: { orderId, provider: PROVIDER },
+            data: {
+              status: "SUCCEEDED",
+              intentId: pi?.id ?? undefined,
+              extRef: pi?.latest_charge ?? undefined,
+            },
+          }),
+          prisma.order.update({
+            where: { id: orderId },
+            data: { status: "PAID" },
+          }),
+        ]);
+      } else {
+        // Ya estaba PAID: actualizamos payment por consistencia
+        await prisma.payment.updateMany({
+          where: { orderId, provider: PROVIDER },
+          data: {
+            status: "SUCCEEDED",
+            intentId: pi?.id ?? undefined,
+            extRef: pi?.latest_charge ?? undefined,
+          },
+        });
+      }
+    } else {
+      // Otros estados: registra el estado del payment (no cambiamos Order aquí)
+      await prisma.payment.updateMany({
+        where: { orderId, provider: PROVIDER },
+        data: {
+          status: statusFromEvent,
+          intentId: pi?.id ?? undefined,
+          extRef: pi?.latest_charge ?? undefined,
+        },
+      });
+    }
+  }
+
+  return NextResponse.json({ received: true });
 }
