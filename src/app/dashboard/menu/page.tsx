@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 import { Role } from "@prisma/client";
 import { redirect } from "next/navigation";
 import NewItemModal from "./NewItemModal";
-import ItemsTable from "../ItemsTable";
+import ItemsTable from "../../orders/history/merchant/ItemsTable";
 
 export default async function MenuPage() {
   const session = await auth();

@@ -19,7 +19,7 @@ export default function OrdersFilter() {
 
   const makeUrl = useCallback(
     (extra: Record<string, string | undefined>) => {
-      const base = new URL("/dashboard", window.location.origin);
+      const base = new URL("/orders/history/merchant", window.location.origin);
       const params = new URLSearchParams(sp.toString());
 
       if (currentStatus) params.set("status", currentStatus);

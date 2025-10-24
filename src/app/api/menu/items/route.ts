@@ -17,7 +17,6 @@ type Body = {
 
 const ALLOWED = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF]);
 
-/** Narrow: convierte unknown -> string de forma segura */
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (typeof err === "string") return err;
@@ -28,7 +27,6 @@ function getErrorMessage(err: unknown): string {
   }
 }
 
-/** Type guard para el body */
 function isBody(v: unknown): v is Body {
   if (typeof v !== "object" || v === null) return false;
   const o = v as Record<string, unknown>;
@@ -43,7 +41,6 @@ function isBody(v: unknown): v is Body {
 
 export async function POST(req: Request) {
   try {
-    // --- Auth & permisos ---
     const session = await auth();
     const user = (session?.user as SessionUser | null) ?? null;
 
@@ -51,7 +48,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // --- Parse body sin any ---
     const raw = (await req.json()) as unknown;
 
     if (!isBody(raw)) {
@@ -68,7 +64,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "price inválido" }, { status: 400 });
     }
 
-    // --- menuId: del body o deducir ---
     let menuId = raw.menuId;
 
     if (!menuId) {
@@ -92,7 +87,6 @@ export async function POST(req: Request) {
       menuId = menus[0].id;
     }
 
-    // Seguridad: que el menú pertenezca al tenant del usuario
     const okMenu = await prisma.menu.findFirst({
       where: { id: menuId, tenantId: user.tenantId },
       select: { id: true },
@@ -101,7 +95,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Menu inválido" }, { status: 400 });
     }
 
-    // --- Crear item ---
     const item = await prisma.menuItem.create({
       data: {
         name,
@@ -124,7 +117,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ item }, { status: 201 });
   } catch (err: unknown) {
-    // sin "any"
     const msg = getErrorMessage(err);
     console.error("POST /api/menu/items error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });

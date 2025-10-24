@@ -2,7 +2,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import EditItemModal from "./menu/EditItemModal";
+import EditItemModal from "../../../dashboard/menu/EditItemModal";
 
 type Item = {
   id: string;

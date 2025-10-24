@@ -2,9 +2,13 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import CartBadge from "@/components/cart/CartBadge";
 import type { Role } from "@prisma/client";
+import { is } from "zod/locales";
 
 function isMerchant(role: Role | undefined | null): boolean {
   return role === "MERCHANT_OWNER" || role === "MERCHANT_STAFF" || role === "ADMIN";
+}
+function isCustomer(role: Role | undefined | null): boolean {
+  return role === "CUSTOMER";
 }
 
 export default async function Header() {
@@ -19,9 +23,9 @@ export default async function Header() {
         <nav className="flex items-center gap-4 text-sm">
           <Link href="/">Inicio</Link>
 
-          {user && <Link href="/orders/history">Mis pedidos</Link>}
+          {isCustomer(user?.role) && <Link href="/orders/history/customer">Mis pedidos</Link>}
+          {isMerchant(user?.role) && <Link href="/orders/history/merchant">Pedidos</Link>}
           {isMerchant(user?.role) && <Link href="/dashboard">Dashboard</Link>}
-
           <CartBadge /> {/* ⬅️ aquí va el badge */}
 
           {user ? (

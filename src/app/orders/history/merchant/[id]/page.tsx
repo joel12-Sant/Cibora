@@ -20,7 +20,7 @@ export default async function OrderDetailPage({ params }: Props) {
     return (
       <main className="mx-auto max-w-2xl p-6">
         <p>No autorizado.</p>
-        <Link className="underline" href="/dashboard">Volver</Link>
+        <Link className="underline" href="/orders/history/merchant">Volver</Link>
       </main>
     );
   }
@@ -42,7 +42,7 @@ export default async function OrderDetailPage({ params }: Props) {
     return (
       <main className="mx-auto max-w-2xl p-6">
         <p>Pedido no encontrado.</p>
-        <Link className="underline" href="/dashboard">Volver</Link>
+        <Link className="underline" href="/orders/history/merchant">Volver</Link>
       </main>
     );
   }
@@ -58,7 +58,7 @@ export default async function OrderDetailPage({ params }: Props) {
             Cliente: {order.user?.name ?? "—"} ({order.user?.email ?? "—"})
           </p>
         </div>
-        <Link href="/dashboard" className="underline">Volver</Link>
+        <Link href="/orders/history/merchant" className="underline">Volver</Link>
       </header>
 
       <section className="rounded-xl border p-4">
