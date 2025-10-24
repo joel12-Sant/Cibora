@@ -119,6 +119,18 @@ export default async function DashboardPage({ searchParams }: Props) {
   return (
     <main className="mx-auto max-w-5xl p-6 space-y-6">
       <h1 className="text-2xl font-semibold">Panel del restaurante</h1>
+      <section>
+        <div className="flex items-center justify-between p-4">
+          <h2 className="mb-2 font-medium">Menú</h2>
+          <Link
+            href="/dashboard/menu"
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+          >
+            Gestionar menú
+          </Link>
+        </div>
+        <ItemsTable items={items} />
+      </section>
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <Chip href={makeHref()} active={!statusFilter} label={`Todos`} count={totalAll} />
@@ -166,18 +178,6 @@ export default async function DashboardPage({ searchParams }: Props) {
         </ul>
       </section>
 
-      <section>
-        <div className="flex items-center justify-between p-4">
-          <h2 className="mb-2 font-medium">Menú</h2>
-          <Link
-            href="/dashboard/menu"
-            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
-          >
-            Gestionar menú
-          </Link>
-        </div>
-        <ItemsTable items={items} />
-      </section>
     </main>
   );
 }

@@ -35,8 +35,7 @@ export default async function MenuPage() {
         <h1 className="text-xl font-semibold">Menú</h1>
         <NewItemModal />
       </div>
-
-      {/* Reusa tu tabla existente */}
+      
       <ItemsTable items={items} />
     </div>
   );
