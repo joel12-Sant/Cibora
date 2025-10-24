@@ -1,3 +1,4 @@
+// src/app/api/menu/items/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
@@ -6,8 +7,8 @@ import { Role } from "@prisma/client";
 type SessionUser = { id: string; role: Role; tenantId: string | null };
 
 type Body = {
-  name?: string;
-  price?: number;
+  name: string;
+  price: number;
   active?: boolean;
   imageUrl?: string;
   description?: string;
@@ -16,36 +17,59 @@ type Body = {
 
 const ALLOWED = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF]);
 
+/** Narrow: convierte unknown -> string de forma segura */
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+/** Type guard para el body */
+function isBody(v: unknown): v is Body {
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as Record<string, unknown>;
+  const validName = typeof o.name === "string" && o.name.trim().length > 0;
+  const validPrice = typeof o.price === "number" && Number.isFinite(o.price);
+  const validActive = o.active === undefined || typeof o.active === "boolean";
+  const validImageUrl = o.imageUrl === undefined || typeof o.imageUrl === "string";
+  const validDescription = o.description === undefined || typeof o.description === "string";
+  const validMenuId = o.menuId === undefined || typeof o.menuId === "string";
+  return validName && validPrice && validActive && validImageUrl && validDescription && validMenuId;
+}
+
 export async function POST(req: Request) {
   try {
+    // --- Auth & permisos ---
     const session = await auth();
-    const user = (session?.user as SessionUser) ?? null;
+    const user = (session?.user as SessionUser | null) ?? null;
 
     if (!user || !user.tenantId || !ALLOWED.has(user.role)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as Body;
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    const price = typeof body.price === "number" ? body.price : Number.NaN;
-    const active = typeof body.active === "boolean" ? body.active : true;
-    const imageUrl =
-      typeof body.imageUrl === "string" && body.imageUrl.trim() !== ""
-        ? body.imageUrl.trim()
-        : undefined;
-    const description =
-      typeof body.description === "string" && body.description.trim() !== ""
-        ? body.description.trim()
-        : undefined;
+    // --- Parse body sin any ---
+    const raw = (await req.json()) as unknown;
 
-    if (!name) {
-      return NextResponse.json({ error: "name requerido" }, { status: 400 });
+    if (!isBody(raw)) {
+      return NextResponse.json({ error: "Body inválido" }, { status: 400 });
     }
-    if (Number.isNaN(price) || price < 0) {
+
+    const name = raw.name.trim();
+    const price = raw.price;
+    const active = raw.active ?? true;
+    const imageUrl = raw.imageUrl?.trim() || undefined;
+    const description = raw.description?.trim() || undefined;
+
+    if (price < 0) {
       return NextResponse.json({ error: "price inválido" }, { status: 400 });
     }
 
-    let menuId = body.menuId;
+    // --- menuId: del body o deducir ---
+    let menuId = raw.menuId;
 
     if (!menuId) {
       const menus = await prisma.menu.findMany({
@@ -61,16 +85,14 @@ export async function POST(req: Request) {
       }
       if (menus.length > 1) {
         return NextResponse.json(
-          {
-            error:
-              "Hay múltiples menús para este tenant. Envía menuId en el body.",
-          },
+          { error: "Hay múltiples menús; envía menuId en el body." },
           { status: 400 }
         );
       }
       menuId = menus[0].id;
     }
 
+    // Seguridad: que el menú pertenezca al tenant del usuario
     const okMenu = await prisma.menu.findFirst({
       where: { id: menuId, tenantId: user.tenantId },
       select: { id: true },
@@ -101,11 +123,10 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ item }, { status: 201 });
-  } catch (e: any) {
-    console.error("POST /api/menu/items error:", e);
-    return NextResponse.json(
-      { error: e?.message ?? "error" },
-      { status: 500 }
-    );
+  } catch (err: unknown) {
+    // sin "any"
+    const msg = getErrorMessage(err);
+    console.error("POST /api/menu/items error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
