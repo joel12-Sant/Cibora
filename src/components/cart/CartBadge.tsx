@@ -18,10 +18,13 @@ export default function CartBadge() {
   return (
     <Link
       href="/cart"
-      className="relative inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
+      className=" inline-flex items-center rounded-full px-4 py-2 text-sm font-medium
+                  bg-amber-500 text-white no-underline
+                  hover:text-orange-700 hover:bg-orange-50 transition
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
       aria-label={`Carrito con ${count} ${count === 1 ? "artículo" : "artículos"}`}
     >
-      Carrito
+      Carrito&nbsp;
       <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border px-1 text-xs">
         {count}
       </span>
