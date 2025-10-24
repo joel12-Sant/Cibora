@@ -1,4 +1,3 @@
-// src/app/api/menu/items/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
@@ -12,7 +11,6 @@ type Body = {
   active?: boolean;
   imageUrl?: string;
   description?: string;
-  // Opcional: si manejas múltiples menús por tenant
   menuId?: string;
 };
 
@@ -20,7 +18,6 @@ const ALLOWED = new Set<Role>([Role.MERCHANT_OWNER, Role.MERCHANT_STAFF]);
 
 export async function POST(req: Request) {
   try {
-    // --- Auth & permisos ---
     const session = await auth();
     const user = (session?.user as SessionUser) ?? null;
 
@@ -28,7 +25,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // --- Body & validación básica ---
     const body = (await req.json().catch(() => ({}))) as Body;
     const name = typeof body.name === "string" ? body.name.trim() : "";
     const price = typeof body.price === "number" ? body.price : Number.NaN;
@@ -49,14 +45,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "price inválido" }, { status: 400 });
     }
 
-    // --- Determinar menuId ---
-    // Opción A: lo envías desde el cliente
     let menuId = body.menuId;
 
-    // Opción B: si no viene, intentamos deducirlo:
     if (!menuId) {
-      // Si tu modelo tiene un único menú por tenant,
-      // puedes obtenerlo así:
       const menus = await prisma.menu.findMany({
         where: { tenantId: user.tenantId },
         select: { id: true },
@@ -69,7 +60,6 @@ export async function POST(req: Request) {
         );
       }
       if (menus.length > 1) {
-        // Evitamos ambigüedad si hay varios menús
         return NextResponse.json(
           {
             error:
@@ -81,7 +71,6 @@ export async function POST(req: Request) {
       menuId = menus[0].id;
     }
 
-    // Seguridad: que el menú pertenezca al tenant del usuario
     const okMenu = await prisma.menu.findFirst({
       where: { id: menuId, tenantId: user.tenantId },
       select: { id: true },
