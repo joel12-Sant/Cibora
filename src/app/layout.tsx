@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
+import Footer from "@/components/layout/Footer";
 import SessionProvider from "@/components/auth/SessionProvider";
 import CartHydrator from "@/app/cart/CartHydrator";
 import { Manrope } from "next/font/google";
@@ -20,11 +21,15 @@ const manrope = Manrope({
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="es" className={manrope.variable}>
-      <body className="min-h-screen font-sans bg-white text-zinc-900 antialiased">
+      <body className="min-h-[100dvh] flex flex-col font-sans bg-white text-zinc-900 antialiased">
         <SessionProvider>
           <CartHydrator />
           <Header />
-          <main>{children}</main>
+          <main id="page" className="flex-1 flex flex-col">
+            {children}
+          </main>
+
+          <Footer />
         </SessionProvider>
       </body>
     </html>
