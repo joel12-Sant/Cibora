@@ -29,7 +29,7 @@ export default function CourierStep() {
         alert(data?.error || "No se pudo guardar");
         return;
       }
-      router.push("/restaurants");
+      router.push("/");
     } finally {
       setLoading(false);
     }

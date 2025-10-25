@@ -57,7 +57,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, tenantId: tenant.id });
 }
-// ... (deja el POST tal cual mostrado arriba)
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);

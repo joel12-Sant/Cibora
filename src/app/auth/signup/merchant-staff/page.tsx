@@ -17,7 +17,7 @@ export default function StaffRequestStep() {
       const data = await res.json().catch(()=> ({}));
       if(res.ok) setResults(data?.tenants ?? []);
     })();
-    return ()=>ctrl.abort();
+    
   },[q]);
 
   async function onSend() {
@@ -32,7 +32,7 @@ export default function StaffRequestStep() {
       const data = await res.json().catch(()=> ({}));
       if(!res.ok){ alert(data?.error || "No se pudo enviar la solicitud"); return; }
       alert("Solicitud enviada. El dueño recibirá un correo para aprobarte.");
-      window.location.href = "/"; // o /restaurants
+      window.location.href = "/";
     } finally { setLoading(false); }
   }
 

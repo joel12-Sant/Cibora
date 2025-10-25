@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { signOut } from "next-auth/react";
 
 type Props = {
@@ -9,10 +10,21 @@ type Props = {
 };
 
 export default function SignOutButton({
-  className = "",
+  className,
   callbackUrl = "/",
   children = "Cerrar sesión",
 }: Props) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  // Para que el HTML SSR y el 1er render del cliente coincidan,
+  // no renderizamos el botón hasta que el componente esté montado.
+  if (!mounted) {
+    // Placeholder opcional para evitar "brincos" de layout
+    return <span className="inline-block h-9" aria-hidden="true" />;
+  }
+
   return (
     <button
       type="button"
