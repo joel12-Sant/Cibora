@@ -82,7 +82,7 @@ export default async function Header() {
                     <CartBadge />
                   </li>
 
-                  <li>
+                  <li className="">
                     {user ? (
                       <StyleButton href="/api/auth/signout" text="Cerrar sesión" method="post" />
                     ) : (

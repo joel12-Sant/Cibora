@@ -28,9 +28,9 @@ export default function StyleButton({
   if (method) {
     return (
       <form action={href} method={method}>
-        <button type="submit" className={base}>
+        <Link href={href} aria-label={label} className={base} type="submit">
           {text}
-        </button>
+        </Link>
       </form>
     );
   }
