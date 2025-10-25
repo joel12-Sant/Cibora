@@ -19,7 +19,7 @@ export default async function Header() {
     <header className="sticky top-0 z-50 bg-amber-400 border-b border-amber-300">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-14 items-center justify-between gap-4">
-          {/*Logo*/}
+          {/* Logo */}
           <Link
             href="/"
             aria-label="Ir a inicio"
@@ -36,9 +36,9 @@ export default async function Header() {
           {/* Acciones rápidas (desktop) */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
             {user ? (
-              StyleButton("/api/auth/signout","","Cerrar sesión","post")
+              <StyleButton href="/api/auth/signout" text="Cerrar sesión" method="post" />
             ) : (
-              StyleButton("/auth/signin", "Iniciar sesión en su cuenta", "Iniciar sesión" )
+              <StyleButton href="/auth/signin" label="Iniciar sesión en su cuenta" text="Iniciar sesión" />
             )}
           </div>
 
@@ -59,30 +59,22 @@ export default async function Header() {
               </svg>
             </summary>
 
-            {/* Panel móvil */}
+            {/*movil*/}
             <div className="absolute right-0 mt-2 w-72 rounded-2xl border border-amber-300 bg-white p-3 shadow-md z-50">
               <nav aria-label="Principal móvil">
                 <ul className="flex flex-col gap-2 text-sm">
-                  <li>
-                    {StyleButton("/", "Ir a inicio", "Inicio")}
-                  </li>
+                  <li><StyleButton href="/" label="Ir a inicio" text="Inicio" /></li>
 
                   {isCustomer(user?.role) && (
-                    <li>
-                      {StyleButton("/orders/history/customer", "Ver mis pedidos", "Mis pedidos")}
-                    </li>
+                    <li><StyleButton href="/orders/history/customer" label="Ver mis pedidos" text="Mis pedidos" /></li>
                   )}
 
                   {isMerchant(user?.role) && (
-                    <li>
-                      {StyleButton("/orders/history/merchant", "Ver los pedidos del comerciante", "Pedidos")}
-                    </li>
+                    <li><StyleButton href="/orders/history/merchant" label="Ver pedidos del comerciante" text="Pedidos" /></li>
                   )}
 
                   {isMerchant(user?.role) && (
-                    <li>
-                      {StyleButton("/dashboard", "Ir al panel de control del comerciante", "Dashboard")}
-                    </li>
+                    <li><StyleButton href="/dashboard" label="Ir al panel del comerciante" text="Dashboard" /></li>
                   )}
 
                   <li className="flex items-center justify-between pt-1">
@@ -92,9 +84,9 @@ export default async function Header() {
 
                   <li>
                     {user ? (
-                      StyleButton("/api/auth/signout","","Cerrar sesión","post")
+                      <StyleButton href="/api/auth/signout" text="Cerrar sesión" method="post" />
                     ) : (
-                      StyleButton("/auth/signin","Iniciar sesión en su cuenta","Iniciar sesión")
+                      <StyleButton href="/auth/signin" label="Iniciar sesión en su cuenta" text="Iniciar sesión" />
                     )}
                   </li>
                 </ul>
@@ -103,37 +95,26 @@ export default async function Header() {
           </details>
         </div>
 
-        {/* Fila inferior*/}
+        {/* Fila inferior (desktop) */}
         <div className="hidden md:block pb-5">
           <nav aria-label="Principal">
-            <ul className="flex">
-              <div className="flex items-center gap-2">
-                <li>
-                    {StyleButton("/", "Ir a inicio", "Inicio")}
-                </li>
+            <ul className="flex items-center gap-2">
+              <li><StyleButton href="/" label="Ir a inicio" text="Inicio" size="sm" /></li>
 
-                {isCustomer(user?.role) && (
-                  <li>
-                    {StyleButton("/orders/history/customer", "Ver mis pedidos", "Mis pedidos","text-sm")}
-                  </li>
-                )}
+              {isCustomer(user?.role) && (
+                <li><StyleButton href="/orders/history/customer" label="Ver mis pedidos" text="Mis pedidos" size="sm" /></li>
+              )}
 
-                {isMerchant(user?.role) && (
-                  <li>
-                    {StyleButton("/orders/history/merchant", "Ver los pedidos del comerciante", "Pedidos","text-sm")}
-                  </li>
-                )}
+              {isMerchant(user?.role) && (
+                <li><StyleButton href="/orders/history/merchant" label="Ver pedidos del comerciante" text="Pedidos" size="sm" /></li>
+              )}
 
-                {isMerchant(user?.role) && (
-                  <li>
-                    {StyleButton("/dashboard", "Ir al panel de control del comerciante","dashboard","text-sm")}
-                  </li>
-                )}
-                <li>
-                  <CartBadge />
-                </li>
-              </div>
+              {isMerchant(user?.role) && (
+                <li><StyleButton href="/dashboard" label="Ir al panel del comerciante" text="Dashboard" size="sm" /></li>
+              )}
 
+              {/* CartBadge a la derecha */}
+              <li><CartBadge /></li>
             </ul>
           </nav>
         </div>
