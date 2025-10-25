@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import CartBadge from "@/components/cart/CartBadge";
 import type { Role } from "@prisma/client";
 import StyleButton from "@/components/style-button";
+import SignOutButton from "../auth/SignOutButton";
 
 function isMerchant(role: Role | undefined | null): boolean {
   return role === "MERCHANT_OWNER" || role === "MERCHANT_STAFF" || role === "ADMIN";
@@ -36,7 +37,7 @@ export default async function Header() {
           {/* Acciones rápidas (desktop) */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
             {user ? (
-              <StyleButton href="/api/auth/signout" text="Cerrar sesión" method="post" />
+              <SignOutButton />
             ) : (
               <StyleButton href="/auth/signin" label="Iniciar sesión en su cuenta" text="Iniciar sesión" />
             )}
@@ -84,7 +85,11 @@ export default async function Header() {
 
                   <li className="">
                     {user ? (
-                      <StyleButton href="/api/auth/signout" text="Cerrar sesión" method="post" />
+                      <SignOutButton className="
+                        block w-full text-center rounded-full px-4 py-2 text-sm font-semibold
+                        bg-amber-500 text-white hover:text-orange-700 hover:bg-orange-50
+                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+                        " />
                     ) : (
                       <StyleButton href="/auth/signin" label="Iniciar sesión en su cuenta" text="Iniciar sesión" />
                     )}

@@ -1,4 +1,3 @@
-// src/app/orders/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -15,10 +14,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Body puede no venir o venir vacío
     const body = (await req.json().catch(() => ({}))) as { tenantId?: string };
 
-    // tenantId opcional: si no viene y sólo hay 1 carrito ACTIVE, lo inferimos
     let tenantId: string | null = body?.tenantId ?? null;
 
     if (!tenantId) {
@@ -38,7 +35,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Transacción para crear la orden, mover items y cerrar el carrito
     const result = await prisma.$transaction(async (tx) => {
       const cart = await tx.cart.findFirst({
         where: { userId, tenantId: tenantId!, status: CartStatus.ACTIVE },
@@ -56,7 +52,6 @@ export async function POST(req: Request) {
       });
 
       if (!cart || cart.items.length === 0) {
-        // Lanzamos un error "conocido" para mapearlo a 400 más abajo
         throw new Error("No hay un carrito activo con ítems para este tenant.");
       }
 
@@ -83,7 +78,6 @@ export async function POST(req: Request) {
         skipDuplicates: false,
       });
 
-      // Limpieza/estado del carrito
       await tx.cart.deleteMany({
         where: { userId, tenantId: tenantId!, status: CartStatus.CONVERTED },
       });
@@ -104,7 +98,6 @@ export async function POST(req: Request) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[POST /api/orders] error:", message);
 
-    // Mapeamos errores "esperados" a 400
     if (message.includes("No hay un carrito activo")) {
       return NextResponse.json({ error: message }, { status: 400 });
     }
