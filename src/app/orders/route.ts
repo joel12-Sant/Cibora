@@ -7,7 +7,7 @@ import { authOptions } from "@/lib/auth-options";
 const BodySchema = z.object({
   items: z.array(
     z.object({
-      id: z.string().uuid(), // MenuItem.id
+      id: z.string().uuid(),
       qty: z.number().int().min(1),
     })
   ).min(1),
@@ -32,7 +32,6 @@ export async function POST(req: Request) {
 
     const items: OrderItemInput[] = parsed.data.items;
 
-    // 1) Traer items + tenant
     const ids = items.map((i) => i.id);
     const dbItems: DbItem[] = await prisma.menuItem.findMany({
       where: { id: { in: ids } },
@@ -58,7 +57,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2) Todos del mismo tenant
     const tenantIds = Array.from(new Set(dbItems.map((i) => i.menu.tenantId)));
     if (tenantIds.length !== 1) {
       return NextResponse.json<ApiErr>(
@@ -68,11 +66,9 @@ export async function POST(req: Request) {
     }
     const tenantId = tenantIds[0];
 
-    // 3) Calcular total
     const map = new Map<string, DbItem>(dbItems.map((i) => [i.id, i]));
     const total = items.reduce((acc, it) => acc + map.get(it.id)!.price * it.qty, 0);
 
-    // 4) Resolver userId desde la sesión (email -> id) o guest
     const session = await getServerSession(authOptions);
     const email: string | null = session?.user?.email ?? null;
 
@@ -86,7 +82,6 @@ export async function POST(req: Request) {
     }
     if (!userId) userId = await ensureGuestUser();
 
-    // 5) Crear orden
     const order = await prisma.order.create({
       data: {
         tenantId,
@@ -110,7 +105,6 @@ export async function POST(req: Request) {
   }
 }
 
-// Usuario invitado
 async function ensureGuestUser(): Promise<string> {
   const email = "guest@cibora.local";
   const existing = await prisma.user.findUnique({
