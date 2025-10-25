@@ -43,15 +43,10 @@ function normalizeErrorMessage(data: unknown, fallback = "No se pudo crear la or
   if (typeof data === "string") return data;
 
   if (isRecord(data)) {
-    // { error: "..." }
     if (typeof data.error === "string") return String(data.error);
-
-    // { error: { _errors: [...] } }
     if (isRecord(data.error) && isStringArray((data.error as StringDict)["_errors"])) {
       return ((data.error as { _errors: string[] })._errors).join(", ");
     }
-
-    // ZodError formateado: { _errors:[], items:{ _errors:[], 0:{id:{_errors:["..."]}} } }
     if ("_errors" in data && isStringArray((data as StringDict)["_errors"])) {
       return ((data as { _errors: string[] })._errors).join(", ");
     }
@@ -68,7 +63,6 @@ function normalizeErrorMessage(data: unknown, fallback = "No se pudo crear la or
       if (nested && nested.length > 0) return nested.join(", ");
     }
 
-    // Último recurso: stringify
     return safeStringify(data);
   }
 
@@ -83,7 +77,6 @@ export default function CartPage() {
   const setQty = useCart((s) => s.setQty);
   // const clear = useCart((s) => s.clear);
 
-  // Evitar hydration mismatch cuando hay persistencia
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
 
@@ -95,7 +88,6 @@ export default function CartPage() {
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  // --- Sincronización puntual con servidor (solo si hay sesión) ---
   function syncQtyWithServer(menuItemId: string, qty: number) {
     const tenantId = getLocalTenantId();
     if (status !== "authenticated" || !tenantId) return;
@@ -120,133 +112,168 @@ export default function CartPage() {
 
   if (!ready) {
     return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-2xl font-semibold mb-4">Carrito</h1>
-        <p className="opacity-70">Cargando…</p>
+      <main className="min-h-[100svh] bg-gradient-to-b from-amber-200 via-orange-100 to-amber-50 text-zinc-900">
+        <section className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+          <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-6 md:p-8">
+            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Carrito</h1>
+            <p className="mt-2 text-sm opacity-70">Cargando…</p>
+          </div>
+        </section>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-3xl p-6 space-y-6">
-      {/* Hidrata/merge automático contra servidor si hay sesión */}
-      <CartHydrator />
+    <main className="min-h-[100svh] bg-gradient-to-b from-amber-200 via-orange-100 to-amber-50 text-zinc-900">
+      <section className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        {/* Hidrata/merge automático contra servidor si hay sesión */}
+        <CartHydrator />
 
-      <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Carrito</h1>
-        {/* {items.length > 0 && (
-          <button className="text-sm underline" onClick={() => clear()} type="button">
-            Vaciar
-          </button>
-        )} */}
-      </header>
-
-      <ul className="divide-y rounded-xl border">
-        {items.map((it) => (
-          <li key={it.id} className="flex items-center justify-between p-3 gap-3">
-            <div>
-              <p className="font-medium">{it.name}</p>
-              <p className="text-sm opacity-70">{formatMXN(it.price)} c/u</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <QtyControl
-                value={it.qty}
-                onChange={(q) => {
-                  setQty(it.id, q);           // local
-                  syncQtyWithServer(it.id, q); // servidor (si hay sesión)
-                }}
-              />
-              <div className="w-24 text-right font-medium">
-                {formatMXN(it.price * it.qty)}
-              </div>
+        <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-4 sm:p-6 md:p-8">
+          <header className="flex items-center justify-between">
+            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Carrito</h1>
+            {/* {items.length > 0 && (
               <button
-                className="text-sm underline"
-                onClick={() => {
-                  remove(it.id);            // local
-                  removeFromServer(it.id);  // servidor (si hay sesión)
-                }}
+                className="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium bg-zinc-100 text-zinc-800 hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
+                onClick={() => clear()}
                 type="button"
               >
-                Quitar
+                Vaciar
               </button>
+            )} */}
+          </header>
+
+          {/* Lista de ítems */}
+          <ul className="mt-5 grid grid-cols-1 gap-3">
+            {items.map((it) => (
+              <li key={it.id}>
+                <article
+                  className="
+                    group flex items-center justify-between gap-4 rounded-2xl border border-zinc-200
+                    bg-white p-4 shadow-sm transition hover:shadow-md focus-within:shadow-md
+                  "
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-zinc-900">{it.name}</p>
+                    <p className="mt-1 text-sm text-zinc-600">{formatMXN(it.price)} c/u</p>
+                  </div>
+
+                  <div className="flex items-center gap-3 sm:gap-4">
+                    <QtyControl
+                      value={it.qty}
+                      onChange={(q) => {
+                        setQty(it.id, q);           // local
+                        syncQtyWithServer(it.id, q); // servidor (si hay sesión)
+                      }}
+                    />
+                    <div className="w-24 text-right font-semibold tabular-nums">
+                      {formatMXN(it.price * it.qty)}
+                    </div>
+                    <button
+                      className="
+                        shrink-0 text-xs sm:text-sm underline text-orange-700 hover:text-orange-700/80
+                        rounded-md px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+                      "
+                      onClick={() => {
+                        remove(it.id);           // local
+                        removeFromServer(it.id); // servidor (si hay sesión)
+                      }}
+                      type="button"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </article>
+              </li>
+            ))}
+
+            {items.length === 0 && (
+              <li className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/60 p-6 text-sm text-zinc-700">
+                Tu carrito está vacío.{" "}
+                <span className="font-semibold text-orange-700">
+                  Agrega platillos para continuar →
+                </span>
+              </li>
+            )}
+          </ul>
+
+          {/* Totales y CTA */}
+          <div className="mt-6 flex flex-col items-end gap-3">
+            <div className="inline-flex items-center rounded-full bg-white/80 ring-1 ring-amber-100 px-4 py-2 text-sm shadow-sm">
+              Total:&nbsp;<span className="font-semibold tabular-nums">{formatMXN(total)}</span>
             </div>
-          </li>
-        ))}
-        {items.length === 0 && <li className="p-3 opacity-70">Tu carrito está vacío.</li>}
-      </ul>
 
-      <div className="flex flex-col items-end gap-2">
-        <div className="rounded-full border px-4 py-2 text-sm">
-          Total: <span className="font-semibold">{formatMXN(total)}</span>
-        </div>
+            {msg && <p className="text-sm text-red-600">{msg}</p>}
 
-        {msg && <p className="text-sm text-red-600">{msg}</p>}
+            <button
+              type="button"
+              className="
+                inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold
+                bg-amber-500 text-white no-underline
+                hover:text-orange-700 hover:bg-orange-50 transition
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+                disabled:opacity-60
+              "
+              disabled={creating || items.length === 0}
+              onClick={async () => {
+                if (creating || items.length === 0) return;
+                setCreating(true);
+                setMsg(null);
+                try {
+                  const tenantId = getLocalTenantId();
+                  const res = await fetch("/api/orders", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(tenantId ? { tenantId } : {}),
+                    cache: "no-store",
+                  });
 
-        <button
-          type="button"
-          className="rounded-md border px-3 py-1 text-sm underline disabled:opacity-50"
-          disabled={creating || items.length === 0}
-          onClick={async () => {
-            if (creating || items.length === 0) return;
-            setCreating(true);
-            setMsg(null);
-            try {
-              // Obtén tenantId local; si no existe, el backend intentará inferirlo.
-              const tenantId = getLocalTenantId();
+                  let data: unknown = null;
+                  try {
+                    data = await res.json();
+                  } catch {
+                    // sin body
+                  }
 
-              const res = await fetch("/api/orders", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                // Enviamos tenantId explícito si lo tenemos (más robusto)
-                body: JSON.stringify(tenantId ? { tenantId } : {}),
-                cache: "no-store",
-              });
+                  if (!res.ok) {
+                    setMsg(normalizeErrorMessage(data));
+                    setCreating(false);
+                    return;
+                  }
 
-              let data: unknown = null;
-              try {
-                data = await res.json();
-              } catch {
-                // respuesta sin body
-              }
+                  let orderId: string | null = null;
+                  if (isRecord(data)) {
+                    if (typeof data.orderId === "string") {
+                      orderId = data.orderId;
+                    } else if (typeof (data as StringDict).id === "string") {
+                      orderId = String((data as StringDict).id);
+                    } else if (
+                      isRecord((data as StringDict).order) &&
+                      typeof ((data as StringDict).order as StringDict).id === "string"
+                    ) {
+                      orderId = String(((data as StringDict).order as StringDict).id);
+                    }
+                  }
 
-              if (!res.ok) {
-                setMsg(normalizeErrorMessage(data));
-                setCreating(false);
-                return;
-              }
+                  if (!orderId) {
+                    console.warn("Respuesta inesperada de /api/orders:", data);
+                    setMsg("La respuesta no incluyó un orderId.");
+                    setCreating(false);
+                    return;
+                  }
 
-              // Acepta {orderId} | {id} | {order:{id}}
-              let orderId: string | null = null;
-              if (isRecord(data)) {
-                if (typeof data.orderId === "string") {
-                  orderId = data.orderId;
-                } else if (typeof (data as StringDict).id === "string") {
-                  orderId = String((data as StringDict).id);
-                } else if (
-                  isRecord((data as StringDict).order) &&
-                  typeof ((data as StringDict).order as StringDict).id === "string"
-                ) {
-                  orderId = String(((data as StringDict).order as StringDict).id);
+                  window.location.href = `/orders/${orderId}/pay`;
+                } catch {
+                  setMsg("No se pudo iniciar el pago.");
+                  setCreating(false);
                 }
-              }
-
-              if (!orderId) {
-                console.warn("Respuesta inesperada de /api/orders:", data);
-                setMsg("La respuesta no incluyó un orderId.");
-                setCreating(false);
-                return;
-              }
-
-              window.location.href = `/orders/${orderId}/pay`;
-            } catch {
-              setMsg("No se pudo iniciar el pago.");
-              setCreating(false);
-            }
-          }}
-        >
-          {creating ? "Creando orden…" : "Continuar al pago"}
-        </button>
-      </div>
+              }}
+            >
+              {creating ? "Creando orden…" : "Continuar al pago"}
+            </button>
+          </div>
+        </div>
+      </section>
     </main>
   );
 }
@@ -259,9 +286,12 @@ function QtyControl({
   onChange: (q: number) => void;
 }) {
   return (
-    <div className="inline-flex items-center gap-1">
+    <div className="inline-flex items-center gap-px rounded-xl border border-amber-200 bg-white/80 shadow-sm">
       <button
-        className="rounded-md border px-2 py-1 text-sm"
+        className="
+          rounded-l-xl border-r border-amber-200 px-2 py-1 text-sm font-medium bg-white
+          hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+        "
         onClick={() => onChange(Math.max(1, value - 1))}
         type="button"
         aria-label="Disminuir"
@@ -269,7 +299,10 @@ function QtyControl({
         −
       </button>
       <input
-        className="w-12 rounded-md border p-1 text-center text-sm"
+        className="
+          w-12 border-0 bg-transparent p-1 text-center text-sm tabular-nums
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md
+        "
         value={value}
         onChange={(e) => {
           const n = Number(e.target.value);
@@ -279,7 +312,10 @@ function QtyControl({
         aria-label="Cantidad"
       />
       <button
-        className="rounded-md border px-2 py-1 text-sm"
+        className="
+          rounded-r-xl border-l border-amber-200 px-2 py-1 text-sm font-medium bg-white
+          hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+        "
         onClick={() => onChange(value + 1)}
         type="button"
         aria-label="Aumentar"
