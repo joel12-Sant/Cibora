@@ -77,6 +77,7 @@ export default function CartPage() {
   const setQty = useCart((s) => s.setQty);
   // const clear = useCart((s) => s.clear);
 
+  // Evitar hydration mismatch
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
 
@@ -88,6 +89,7 @@ export default function CartPage() {
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // --- Sincronización puntual con servidor (solo si hay sesión) ---
   function syncQtyWithServer(menuItemId: string, qty: number) {
     const tenantId = getLocalTenantId();
     if (status !== "authenticated" || !tenantId) return;
@@ -114,8 +116,8 @@ export default function CartPage() {
     return (
       <main className="min-h-[100svh] bg-gradient-to-b from-amber-200 via-orange-100 to-amber-50 text-zinc-900">
         <section className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-          <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-6 md:p-8">
-            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Carrito</h1>
+          <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-5 sm:p-6 md:p-8">
+            <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold tracking-tight">Carrito</h1>
             <p className="mt-2 text-sm opacity-70">Cargando…</p>
           </div>
         </section>
@@ -125,40 +127,39 @@ export default function CartPage() {
 
   return (
     <main className="min-h-[100svh] bg-gradient-to-b from-amber-200 via-orange-100 to-amber-50 text-zinc-900">
-      <section className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <section className="mx-auto w-full max-w-5xl px-3 sm:px-6 lg:px-8 py-4 sm:py-6 md:py-8">
         {/* Hidrata/merge automático contra servidor si hay sesión */}
         <CartHydrator />
 
         <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-4 sm:p-6 md:p-8">
-          <header className="flex items-center justify-between">
-            <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Carrito</h1>
-            {/* {items.length > 0 && (
-              <button
-                className="inline-flex items-center rounded-full px-4 py-2 text-sm font-medium bg-zinc-100 text-zinc-800 hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
-                onClick={() => clear()}
-                type="button"
-              >
-                Vaciar
-              </button>
-            )} */}
+          <header className="flex items-end justify-between gap-3">
+            <h1 className="text-lg sm:text-xl md:text-2xl font-extrabold tracking-tight">Carrito</h1>
+
+            {/* Chip de total visible en mobile para referencia rápida */}
+            <div className="sm:hidden inline-flex items-center rounded-full bg-white/80 ring-1 ring-amber-100 px-3 py-1.5 text-xs font-medium shadow-sm">
+              Total:&nbsp;<span className="font-semibold tabular-nums">{formatMXN(total)}</span>
+            </div>
           </header>
 
-          {/* Lista de ítems */}
-          <ul className="mt-5 grid grid-cols-1 gap-3">
+          {/* Lista responsiva */}
+          <ul className="mt-4 space-y-3">
             {items.map((it) => (
               <li key={it.id}>
                 <article
                   className="
-                    group flex items-center justify-between gap-4 rounded-2xl border border-zinc-200
-                    bg-white p-4 shadow-sm transition hover:shadow-md focus-within:shadow-md
+                    grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200 bg-white p-4
+                    shadow-sm transition hover:shadow-md focus-within:shadow-md
+                    sm:grid-cols-12 sm:items-center sm:gap-4
                   "
                 >
-                  <div className="min-w-0">
+                  {/* Nombre + precio unitario */}
+                  <div className="min-w-0 sm:col-span-6">
                     <p className="truncate font-semibold text-zinc-900">{it.name}</p>
-                    <p className="mt-1 text-sm text-zinc-600">{formatMXN(it.price)} c/u</p>
+                    <p className="mt-0.5 text-sm text-zinc-600">{formatMXN(it.price)} c/u</p>
                   </div>
 
-                  <div className="flex items-center gap-3 sm:gap-4">
+                  {/* Control de cantidad (toca grande en mobile) */}
+                  <div className="sm:col-span-3">
                     <QtyControl
                       value={it.qty}
                       onChange={(q) => {
@@ -166,13 +167,20 @@ export default function CartPage() {
                         syncQtyWithServer(it.id, q); // servidor (si hay sesión)
                       }}
                     />
-                    <div className="w-24 text-right font-semibold tabular-nums">
-                      {formatMXN(it.price * it.qty)}
-                    </div>
+                  </div>
+
+                  {/* Total por ítem */}
+                  <div className="flex items-center justify-between sm:block sm:text-right sm:col-span-2">
+                    <span className="text-sm text-zinc-600 sm:hidden">Total</span>
+                    <div className="font-semibold tabular-nums">{formatMXN(it.price * it.qty)}</div>
+                  </div>
+
+                  {/* Acción quitar */}
+                  <div className="sm:col-span-1 sm:justify-self-end">
                     <button
                       className="
-                        shrink-0 text-xs sm:text-sm underline text-orange-700 hover:text-orange-700/80
-                        rounded-md px-1 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+                        w-full sm:w-auto text-xs sm:text-sm underline text-orange-700 hover:text-orange-700/80
+                        rounded-md px-2 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
                       "
                       onClick={() => {
                         remove(it.id);           // local
@@ -198,79 +206,88 @@ export default function CartPage() {
           </ul>
 
           {/* Totales y CTA */}
-          <div className="mt-6 flex flex-col items-end gap-3">
-            <div className="inline-flex items-center rounded-full bg-white/80 ring-1 ring-amber-100 px-4 py-2 text-sm shadow-sm">
+          <div className="mt-5 sm:mt-6 flex flex-col gap-3">
+            {/* Total (en desktop se ve aquí; en mobile ya lo mostramos arriba también) */}
+            <div className="hidden sm:inline-flex self-end items-center rounded-full bg-white/80 ring-1 ring-amber-100 px-4 py-2 text-sm shadow-sm">
               Total:&nbsp;<span className="font-semibold tabular-nums">{formatMXN(total)}</span>
             </div>
 
-            {msg && <p className="text-sm text-red-600">{msg}</p>}
+            {msg && (
+              <p className="text-sm text-red-600" role="status" aria-live="polite">
+                {msg}
+              </p>
+            )}
 
-            <button
-              type="button"
-              className="
-                inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold
-                bg-amber-500 text-white no-underline
-                hover:text-orange-700 hover:bg-orange-50 transition
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                disabled:opacity-60
-              "
-              disabled={creating || items.length === 0}
-              onClick={async () => {
-                if (creating || items.length === 0) return;
-                setCreating(true);
-                setMsg(null);
-                try {
-                  const tenantId = getLocalTenantId();
-                  const res = await fetch("/api/orders", {
-                    method: "POST",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify(tenantId ? { tenantId } : {}),
-                    cache: "no-store",
-                  });
-
-                  let data: unknown = null;
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3">
+              <button
+                type="button"
+                className="
+                  inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold
+                  bg-amber-500 text-white no-underline
+                  hover:text-orange-700 hover:bg-orange-50 transition
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+                  disabled:opacity-60
+                "
+                disabled={creating || items.length === 0}
+                onClick={async () => {
+                  if (creating || items.length === 0) return;
+                  setCreating(true);
+                  setMsg(null);
                   try {
-                    data = await res.json();
-                  } catch {
-                    // sin body
-                  }
+                    const tenantId = getLocalTenantId();
 
-                  if (!res.ok) {
-                    setMsg(normalizeErrorMessage(data));
-                    setCreating(false);
-                    return;
-                  }
+                    const res = await fetch("/api/orders", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify(tenantId ? { tenantId } : {}),
+                      cache: "no-store",
+                    });
 
-                  let orderId: string | null = null;
-                  if (isRecord(data)) {
-                    if (typeof data.orderId === "string") {
-                      orderId = data.orderId;
-                    } else if (typeof (data as StringDict).id === "string") {
-                      orderId = String((data as StringDict).id);
-                    } else if (
-                      isRecord((data as StringDict).order) &&
-                      typeof ((data as StringDict).order as StringDict).id === "string"
-                    ) {
-                      orderId = String(((data as StringDict).order as StringDict).id);
+                    let data: unknown = null;
+                    try {
+                      data = await res.json();
+                    } catch {
+                      // respuesta sin body
                     }
-                  }
 
-                  if (!orderId) {
-                    console.warn("Respuesta inesperada de /api/orders:", data);
-                    setMsg("La respuesta no incluyó un orderId.");
+                    if (!res.ok) {
+                      setMsg(normalizeErrorMessage(data));
+                      setCreating(false);
+                      return;
+                    }
+
+                    // Acepta {orderId} | {id} | {order:{id}}
+                    let orderId: string | null = null;
+                    if (isRecord(data)) {
+                      if (typeof data.orderId === "string") {
+                        orderId = data.orderId;
+                      } else if (typeof (data as StringDict).id === "string") {
+                        orderId = String((data as StringDict).id);
+                      } else if (
+                        isRecord((data as StringDict).order) &&
+                        typeof ((data as StringDict).order as StringDict).id === "string"
+                      ) {
+                        orderId = String(((data as StringDict).order as StringDict).id);
+                      }
+                    }
+
+                    if (!orderId) {
+                      console.warn("Respuesta inesperada de /api/orders:", data);
+                      setMsg("La respuesta no incluyó un orderId.");
+                      setCreating(false);
+                      return;
+                    }
+
+                    window.location.href = `/orders/${orderId}/pay`;
+                  } catch {
+                    setMsg("No se pudo iniciar el pago.");
                     setCreating(false);
-                    return;
                   }
-
-                  window.location.href = `/orders/${orderId}/pay`;
-                } catch {
-                  setMsg("No se pudo iniciar el pago.");
-                  setCreating(false);
-                }
-              }}
-            >
-              {creating ? "Creando orden…" : "Continuar al pago"}
-            </button>
+                }}
+              >
+                {creating ? "Creando orden…" : "Continuar al pago"}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -286,11 +303,19 @@ function QtyControl({
   onChange: (q: number) => void;
 }) {
   return (
-    <div className="inline-flex items-center gap-px rounded-xl border border-amber-200 bg-white/80 shadow-sm">
+    <div
+      className="
+        inline-flex w-full sm:w-auto items-stretch justify-between gap-0 rounded-xl
+        border border-amber-200 bg-white/80 shadow-sm
+      "
+      role="group"
+      aria-label="Cambiar cantidad"
+    >
       <button
         className="
-          rounded-l-xl border-r border-amber-200 px-2 py-1 text-sm font-medium bg-white
+          flex-1 sm:flex-none rounded-l-xl border-r border-amber-200 px-3 py-2 text-sm font-medium bg-white
           hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+          active:translate-y-[0.5px]
         "
         onClick={() => onChange(Math.max(1, value - 1))}
         type="button"
@@ -298,10 +323,11 @@ function QtyControl({
       >
         −
       </button>
+
       <input
         className="
-          w-12 border-0 bg-transparent p-1 text-center text-sm tabular-nums
-          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-md
+          w-full sm:w-14 border-0 bg-transparent px-2 text-center text-sm tabular-nums
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
         "
         value={value}
         onChange={(e) => {
@@ -311,10 +337,12 @@ function QtyControl({
         inputMode="numeric"
         aria-label="Cantidad"
       />
+
       <button
         className="
-          rounded-r-xl border-l border-amber-200 px-2 py-1 text-sm font-medium bg-white
+          flex-1 sm:flex-none rounded-r-xl border-l border-amber-200 px-3 py-2 text-sm font-medium bg-white
           hover:bg-amber-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
+          active:translate-y-[0.5px]
         "
         onClick={() => onChange(value + 1)}
         type="button"
