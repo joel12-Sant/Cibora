@@ -1,4 +1,3 @@
-// src/app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
 import Header from "@/components/layout/Header";
@@ -14,7 +13,7 @@ export const metadata: Metadata = {
 const manrope = Manrope({
   subsets: ["latin"],
   display: "swap",
-  weight: ["200","300","400","500","600","700","800"], // o "variable"
+  weight: ["200","300","400","500","600","700","800"],
   variable: "--font-manrope",
 });
 

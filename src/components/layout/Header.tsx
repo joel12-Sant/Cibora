@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import CartBadge from "@/components/cart/CartBadge";
 import type { Role } from "@prisma/client";
+import StyleButton from "@/components/style-button";
 
 function isMerchant(role: Role | undefined | null): boolean {
   return role === "MERCHANT_OWNER" || role === "MERCHANT_STAFF" || role === "ADMIN";
@@ -17,9 +18,8 @@ export default async function Header() {
   return (
     <header className="sticky top-0 z-50 bg-amber-400 border-b border-amber-300">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Fila superior */}
         <div className="flex h-14 items-center justify-between gap-4">
-          {/* Marca (igual) */}
+          {/*Logo*/}
           <Link
             href="/"
             aria-label="Ir a inicio"
@@ -36,35 +36,13 @@ export default async function Header() {
           {/* Acciones rápidas (desktop) */}
           <div className="hidden md:flex items-center gap-3 shrink-0">
             {user ? (
-              <form action="/api/auth/signout" method="post">
-                <button
-                  type="submit"
-                  className="
-                    inline-flex items-center rounded-full px-4 py-2 text-sm font-medium
-                    bg-amber-500 text-white no-underline
-                    hover:text-orange-700 hover:bg-orange-50 transition
-                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                  "
-                >
-                  Cerrar sesión
-                </button>
-              </form>
+              StyleButton("/api/auth/signout","","Cerrar sesión","post")
             ) : (
-              <Link
-                href="/auth/signin"
-                className="
-                  inline-flex items-center rounded-full px-4 py-2 text-sm font-medium
-                  bg-amber-500 text-white no-underline
-                  hover:text-orange-700 hover:bg-orange-50 transition
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                "
-              >
-                Iniciar sesión
-              </Link>
+              StyleButton("/auth/signin", "Iniciar sesión en su cuenta", "Iniciar sesión" )
             )}
           </div>
 
-          {/* Hamburguesa (móvil) */}
+          {/* Hamburguesa*/}
           <details className="md:hidden relative">
             <summary
               className="
@@ -86,65 +64,24 @@ export default async function Header() {
               <nav aria-label="Principal móvil">
                 <ul className="flex flex-col gap-2 text-sm">
                   <li>
-                    <Link
-                      href="/"
-                      className="
-                        block text-center rounded-full px-4 py-2 font-medium
-                        !bg-amber-500 !text-white no-underline
-                        hover:!text-orange-700 hover:!bg-orange-50 transition
-                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                      "
-                    >
-                      Inicio
-                    </Link>
+                    {StyleButton("/", "Ir a inicio", "Inicio")}
                   </li>
 
                   {isCustomer(user?.role) && (
                     <li>
-                      <Link
-                        href="/orders/history/customer"
-                        className="
-                          block text-center rounded-full px-4 py-2 font-medium
-                          !bg-amber-500 !text-white no-underline
-                          hover:!text-orange-700 hover:!bg-orange-50 transition
-                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                        "
-                      >
-                        Mis pedidos
-                      </Link>
-      
+                      {StyleButton("/orders/history/customer", "Ver mis pedidos", "Mis pedidos")}
                     </li>
                   )}
 
                   {isMerchant(user?.role) && (
                     <li>
-                      <Link
-                        href="/orders/history/merchant"
-                        className="
-                          block text-center rounded-full px-4 py-2 font-medium
-                          !bg-amber-500 !text-white no-underline
-                          hover:!text-orange-700 hover:!bg-orange-50 transition
-                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                        "
-                      >
-                        Pedidos
-                      </Link>
+                      {StyleButton("/orders/history/merchant", "Ver los pedidos del comerciante", "Pedidos")}
                     </li>
                   )}
 
                   {isMerchant(user?.role) && (
                     <li>
-                      <Link
-                        href="/dashboard"
-                        className="
-                          block text-center rounded-full px-4 py-2 font-medium
-                          !bg-amber-500 !text-white no-underline
-                          hover:!text-orange-700 hover:!bg-orange-50 transition
-                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                        "
-                      >
-                        Dashboard
-                      </Link>
+                      {StyleButton("/dashboard", "Ir al panel de control del comerciante", "Dashboard")}
                     </li>
                   )}
 
@@ -155,31 +92,9 @@ export default async function Header() {
 
                   <li>
                     {user ? (
-                      <form action="/api/auth/signout" method="post">
-                        <button
-                          type="submit"
-                          className="
-                            w-full rounded-full px-4 py-2 text-sm font-medium
-                            !bg-amber-500 !text-white no-underline
-                            hover:!text-orange-700 hover:!bg-orange-50 transition
-                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                          "
-                        >
-                          Cerrar sesión
-                        </button>
-                      </form>
+                      StyleButton("/api/auth/signout","","Cerrar sesión","post")
                     ) : (
-                      <Link
-                        href="/auth/signin"
-                        className="
-                          block text-center rounded-full px-4 py-2 text-sm font-medium
-                          !bg-amber-500 !text-white no-underline
-                          hover:!text-orange-700 hover:!bg-orange-50 transition
-                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                        "
-                      >
-                        Iniciar sesión
-                      </Link>
+                      StyleButton("/auth/signin","Iniciar sesión en su cuenta","Iniciar sesión")
                     )}
                   </li>
                 </ul>
@@ -188,70 +103,30 @@ export default async function Header() {
           </details>
         </div>
 
-        {/* Fila inferior (desktop): links en segunda fila + CartBadge */}
+        {/* Fila inferior*/}
         <div className="hidden md:block pb-5">
           <nav aria-label="Principal">
             <ul className="flex">
               <div className="flex items-center gap-2">
                 <li>
-                  <Link
-                    href="/"
-                    className="
-                  inline-flex items-center rounded-full px-4 py-2 text-sm font-medium
-                  bg-amber-500 text-white no-underline
-                  hover:text-orange-700 hover:bg-orange-50 transition
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                    "
-                  >
-                    Inicio
-                  </Link>
+                    {StyleButton("/", "Ir a inicio", "Inicio")}
                 </li>
 
                 {isCustomer(user?.role) && (
                   <li>
-                    <Link
-                      href="/orders/history/customer"
-                      className="
-                  inline-flex items-center rounded-full px-4 py-2 text-sm font-medium
-                  bg-amber-500 text-white no-underline
-                  hover:text-orange-700 hover:bg-orange-50 transition
-                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                      "
-                    >
-                      Mis pedidos
-                    </Link>
+                    {StyleButton("/orders/history/customer", "Ver mis pedidos", "Mis pedidos","text-sm")}
                   </li>
                 )}
 
                 {isMerchant(user?.role) && (
                   <li>
-                    <Link
-                      href="/orders/history/merchant"
-                      className="
-                        inline-flex items-center rounded-full px-4 py-2 text-sm font-medium
-                        text-zinc-800 no-underline
-                        hover:bg-orange-50 hover:text-orange-700 transition
-                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                      "
-                    >
-                      Pedidos
-                    </Link>
+                    {StyleButton("/orders/history/merchant", "Ver los pedidos del comerciante", "Pedidos","text-sm")}
                   </li>
                 )}
 
                 {isMerchant(user?.role) && (
                   <li>
-                    <Link
-                      href="/dashboard"
-                      className="
-                        inline-flex items-center rounded-full px-4 py-2 text-sm font-medium
-                        text-zinc-800 no-underline
-                        hover:bg-orange-50 hover:text-orange-700 transition
-                        focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500
-                      "
-                    >
-                      Dashboard
-                    </Link>
+                    {StyleButton("/dashboard", "Ir al panel de control del comerciante","dashboard","text-sm")}
                   </li>
                 )}
                 <li>
