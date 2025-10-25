@@ -1,120 +1,114 @@
+// src/app/orders/route.ts
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth-options";
-
-const BodySchema = z.object({
-  items: z.array(
-    z.object({
-      id: z.string().uuid(),
-      qty: z.number().int().min(1),
-    })
-  ).min(1),
-});
-
-type ApiOk<T> = { ok: true; data: T };
-type ApiErr = { ok: false; error: unknown };
-
-type OrderItemInput = { id: string; qty: number };
-type DbItem = { id: string; name: string; price: number; active: boolean; menu: { tenantId: string } };
+import { auth } from "@/lib/auth";
+import { CartStatus, OrderStatus } from "@prisma/client";
 
 export async function POST(req: Request) {
   try {
-    const json = (await req.json()) as unknown;
-    const parsed = BodySchema.safeParse(json);
-    if (!parsed.success) {
-      return NextResponse.json<ApiErr>(
-        { ok: false, error: parsed.error.format() },
-        { status: 400 }
-      );
+    const session = await auth();
+    const userId = session?.user?.id as string | undefined;
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const items: OrderItemInput[] = parsed.data.items;
+    // Body puede no venir o venir vacío
+    const body = (await req.json().catch(() => ({}))) as { tenantId?: string };
 
-    const ids = items.map((i) => i.id);
-    const dbItems: DbItem[] = await prisma.menuItem.findMany({
-      where: { id: { in: ids } },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        active: true,
-        menu: { select: { tenantId: true } },
-      },
-    });
+    // tenantId opcional: si no viene y sólo hay 1 carrito ACTIVE, lo inferimos
+    let tenantId: string | null = body?.tenantId ?? null;
 
-    if (dbItems.length !== items.length) {
-      return NextResponse.json<ApiErr>(
-        { ok: false, error: "Some items not found" },
-        { status: 400 }
-      );
-    }
-    if (dbItems.some((i) => !i.active)) {
-      return NextResponse.json<ApiErr>(
-        { ok: false, error: "Some items are inactive" },
-        { status: 400 }
-      );
-    }
-
-    const tenantIds = Array.from(new Set(dbItems.map((i) => i.menu.tenantId)));
-    if (tenantIds.length !== 1) {
-      return NextResponse.json<ApiErr>(
-        { ok: false, error: "Items belong to different tenants" },
-        { status: 400 }
-      );
-    }
-    const tenantId = tenantIds[0];
-
-    const map = new Map<string, DbItem>(dbItems.map((i) => [i.id, i]));
-    const total = items.reduce((acc, it) => acc + map.get(it.id)!.price * it.qty, 0);
-
-    const session = await getServerSession(authOptions);
-    const email: string | null = session?.user?.email ?? null;
-
-    let userId: string | null = null;
-    if (email) {
-      const u = await prisma.user.findUnique({
-        where: { email },
-        select: { id: true },
+    if (!tenantId) {
+      const activeTenants = await prisma.cart.findMany({
+        where: { userId, status: CartStatus.ACTIVE },
+        select: { tenantId: true },
+        distinct: ["tenantId"],
       });
-      userId = u?.id ?? null;
-    }
-    if (!userId) userId = await ensureGuestUser();
 
-    const order = await prisma.order.create({
-      data: {
-        tenantId,
-        userId,
-        status: "CREATED",
-        total,
-        items: {
-          create: items.map((it) => {
-            const ref = map.get(it.id)!;
-            return { itemId: ref.id, name: ref.name, price: ref.price, qty: it.qty };
-          }),
+      if (activeTenants.length === 1) {
+        tenantId = activeTenants[0].tenantId;
+      } else {
+        return NextResponse.json(
+          { error: "tenantId es requerido" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Transacción para crear la orden, mover items y cerrar el carrito
+    const result = await prisma.$transaction(async (tx) => {
+      const cart = await tx.cart.findFirst({
+        where: { userId, tenantId: tenantId!, status: CartStatus.ACTIVE },
+        select: {
+          id: true,
+          items: {
+            select: {
+              menuItemId: true,
+              name: true,
+              price: true,
+              qty: true,
+            },
+          },
         },
-      },
-      select: { id: true, status: true, total: true },
+      });
+
+      if (!cart || cart.items.length === 0) {
+        // Lanzamos un error "conocido" para mapearlo a 400 más abajo
+        throw new Error("No hay un carrito activo con ítems para este tenant.");
+      }
+
+      const total = cart.items.reduce((acc, it) => acc + it.price * it.qty, 0);
+
+      const order = await tx.order.create({
+        data: {
+          userId,
+          tenantId: tenantId!,
+          status: OrderStatus.CREATED,
+          total,
+        },
+        select: { id: true, status: true, total: true },
+      });
+
+      await tx.orderItem.createMany({
+        data: cart.items.map((it) => ({
+          orderId: order.id,
+          itemId: it.menuItemId,
+          name: it.name,
+          price: it.price,
+          qty: it.qty,
+        })),
+        skipDuplicates: false,
+      });
+
+      // Limpieza/estado del carrito
+      await tx.cart.deleteMany({
+        where: { userId, tenantId: tenantId!, status: CartStatus.CONVERTED },
+      });
+
+      await tx.cart.updateMany({
+        where: { userId, tenantId: tenantId!, status: CartStatus.ACTIVE },
+        data: { status: CartStatus.CONVERTED },
+      });
+
+      return order;
     });
 
-    return NextResponse.json<ApiOk<typeof order>>({ ok: true, data: order }, { status: 201 });
+    return NextResponse.json(
+      { ok: true, orderId: result.id, status: result.status, total: result.total },
+      { status: 201 }
+    );
   } catch (err: unknown) {
-    console.error(err);
-    return NextResponse.json<ApiErr>({ ok: false, error: "Internal error" }, { status: 500 });
-  }
-}
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[POST /api/orders] error:", message);
 
-async function ensureGuestUser(): Promise<string> {
-  const email = "guest@cibora.local";
-  const existing = await prisma.user.findUnique({
-    where: { email },
-    select: { id: true },
-  });
-  if (existing) return existing.id;
-  const created = await prisma.user.create({
-    data: { email, role: "CUSTOMER" },
-    select: { id: true },
-  });
-  return created.id;
+    // Mapeamos errores "esperados" a 400
+    if (message.includes("No hay un carrito activo")) {
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+
+    return NextResponse.json({ error: "No se pudo crear la orden" }, { status: 500 });
+  }
 }
