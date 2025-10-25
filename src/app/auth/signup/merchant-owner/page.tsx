@@ -1,10 +1,10 @@
-// src/app/auth/signup/merchant-owner/page.tsx
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { z } from "zod";
 
+// ====== Esquemas de validación ======
 const addressSchema = z.object({
   label: z.string().optional(),
   line1: z
@@ -23,24 +23,62 @@ const addressSchema = z.object({
   longitude: z.coerce.number().optional(),
 });
 
-// ✅ Usamos .trim() (no .transform) para poder encadenar .min/.max/.url
 const formSchema = z.object({
   name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres"),
-  // Permitir vacío "" en opcionales
   description: z.union([z.string().trim().max(500, "Máximo 500 caracteres"), z.literal("")]).optional(),
-  imageUrl: z
-    .union([z.string().trim().url("URL inválida").max(2048, "URL muy larga"), z.literal("")])
-    .optional(),
+  imageUrl: z.union([z.string().trim().url("URL inválida").max(2048, "URL muy larga"), z.literal("")]).optional(),
   useAddress: z.boolean().optional(),
   address: addressSchema.optional(),
 });
 
-type FormData = z.infer<typeof formSchema>;
-type FieldErrors = Partial<Record<keyof FormData, string>> & {
+type FormDataZ = z.infer<typeof formSchema>;
+type AddressZ = z.infer<typeof addressSchema>;
+
+// ====== Tipos de Estado de UI (permite vacíos sin 'any') ======
+type AddressDraft = Partial<{
+  label: string;
+  line1: string;
+  line2: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  latitude: number;
+  longitude: number;
+}>;
+
+type FormDraft = {
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  useAddress: boolean;
+  address?: AddressDraft;
+};
+
+// ====== Tipos auxiliares ======
+type FieldErrors = {
+  name?: string;
+  description?: string;
+  imageUrl?: string;
   "address.line1"?: string;
   "address.city"?: string;
   "address.postalCode"?: string;
   "address.country"?: string;
+  [key: string]: string | undefined;
+};
+
+type ApiErrorDetails = {
+  fieldErrors?: Record<string, string[]>;
+};
+
+type ApiErrorPayload = {
+  error?: string;
+  details?: ApiErrorDetails;
+};
+
+type CreateTenantOk = {
+  ok: true;
+  tenant?: { id: string };
 };
 
 export default function MerchantOwnerStep() {
@@ -48,7 +86,8 @@ export default function MerchantOwnerStep() {
   const [loading, setLoading] = useState(false);
   const [topError, setTopError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [values, setValues] = useState<FormData>({
+
+  const [values, setValues] = useState<FormDraft>({
     name: "",
     description: "",
     imageUrl: "",
@@ -56,14 +95,12 @@ export default function MerchantOwnerStep() {
     address: undefined,
   });
 
-  function set<K extends keyof FormData>(key: K, val: FormData[K]) {
+  // ====== Setters tipados ======
+  function set<K extends keyof FormDraft>(key: K, val: FormDraft[K]) {
     setValues((p) => ({ ...p, [key]: val }));
   }
-  function setAddr<K extends keyof NonNullable<FormData["address"]>>(
-    key: K,
-    val: NonNullable<FormData["address"]>[K]
-  ) {
-    setValues((p) => ({ ...p, address: { ...(p.address ?? {}), [key]: val } as any }));
+  function setAddr<K extends keyof AddressDraft>(key: K, val: AddressDraft[K]) {
+    setValues((p) => ({ ...p, address: { ...(p.address ?? {}), [key]: val } }));
   }
 
   function clearErrors() {
@@ -71,46 +108,53 @@ export default function MerchantOwnerStep() {
     setTopError(null);
   }
 
-  function mapServerFieldErrors(details: any): FieldErrors {
+  function mapServerFieldErrors(details: ApiErrorDetails | undefined): FieldErrors {
     const fe: FieldErrors = {};
     const fld = details?.fieldErrors ?? {};
-    const flat = (k: string) => (Array.isArray(fld[k]) ? fld[k][0] : undefined);
+    const pick = (k: string): string | undefined => (Array.isArray(fld[k]) ? fld[k][0] : undefined);
 
-    fe.name = flat("name");
-    fe.description = flat("description");
-    fe.imageUrl = flat("imageUrl");
-    fe["address.line1"] = flat("address.line1") ?? flat("line1");
-    fe["address.city"] = flat("address.city") ?? flat("city");
-    fe["address.postalCode"] = flat("address.postalCode") ?? flat("postalCode");
-    fe["address.country"] = flat("address.country") ?? flat("country");
+    fe.name = pick("name");
+    fe.description = pick("description");
+    fe.imageUrl = pick("imageUrl");
+    fe["address.line1"] = pick("address.line1") ?? pick("line1");
+    fe["address.city"] = pick("address.city") ?? pick("city");
+    fe["address.postalCode"] = pick("address.postalCode") ?? pick("postalCode");
+    fe["address.country"] = pick("address.country") ?? pick("country");
     return fe;
   }
 
-  function buildPayload(v: FormData) {
-    const clean = (s?: string | null) => (s && s.trim() !== "" ? s.trim() : undefined);
+  // Construye payload limpio para API
+  function buildPayload(v: FormDraft): {
+    name: string;
+    description?: string;
+    imageUrl?: string;
+    address?: Partial<AddressZ>;
+  } {
+    const clean = (s?: string) => (s && s.trim() !== "" ? s.trim() : undefined);
 
-    const addr = v.useAddress
+    const addrDraft = v.useAddress ? v.address : undefined;
+    const addr: Partial<AddressZ> | undefined = addrDraft
       ? {
-        label: clean(v.address?.label as any),
-        line1: clean(v.address?.line1 as any),
-        line2: clean(v.address?.line2 as any),
-        city: clean(v.address?.city as any),
-        state: clean(v.address?.state as any),
-        postalCode: clean(v.address?.postalCode as any),
-        country: clean(v.address?.country as any),
-        latitude: v.address?.latitude,
-        longitude: v.address?.longitude,
-      }
+          label: clean(addrDraft.label),
+          line1: clean(addrDraft.line1),
+          line2: clean(addrDraft.line2),
+          city: clean(addrDraft.city),
+          state: clean(addrDraft.state),
+          postalCode: clean(addrDraft.postalCode),
+          country: clean(addrDraft.country),
+          latitude: addrDraft.latitude,
+          longitude: addrDraft.longitude,
+        }
       : undefined;
 
-    const hasAnyAddr = addr
-      ? Object.values(addr).some((x) => x !== undefined && x !== null && x !== "")
-      : false;
+    const hasAnyAddr =
+      addr &&
+      Object.values(addr).some((x) => x !== undefined && x !== null && x !== "");
 
     return {
-      name: clean(v.name),
-      description: clean(v.description as any),
-      imageUrl: clean(v.imageUrl as any),
+      name: clean(v.name) ?? "",
+      description: clean(v.description),
+      imageUrl: clean(v.imageUrl),
       ...(v.useAddress && hasAnyAddr ? { address: addr } : {}),
     };
   }
@@ -119,14 +163,36 @@ export default function MerchantOwnerStep() {
     e.preventDefault();
     clearErrors();
 
-    const toValidate: FormData = {
-      ...values,
-      address: values.useAddress ? values.address : undefined,
+    // Construimos el objeto que sí valida Zod (sin Address vacío)
+    const toValidate: FormDataZ = {
+      name: values.name,
+      description: values.description,
+      imageUrl: values.imageUrl,
+      useAddress: values.useAddress,
+      address: values.useAddress
+        ? ({
+            label: values.address?.label,
+            line1: values.address?.line1 ?? "",
+            line2: values.address?.line2,
+            city: values.address?.city ?? "",
+            state: values.address?.state,
+            postalCode: values.address?.postalCode ?? "",
+            country: values.address?.country ?? "",
+            latitude: values.address?.latitude,
+            longitude: values.address?.longitude,
+          } as AddressZ)
+        : undefined,
     };
+
+    // Validación con Zod
     const result = formSchema.safeParse(toValidate);
     if (!result.success) {
-      const flat = result.error.flatten().fieldErrors as Record<string, string[] | undefined>;
+      const flat = result.error.flatten().fieldErrors as Record<
+        string,
+        string[] | undefined
+      >;
       const pick = (k: string) => flat[k]?.[0];
+
       const mapped: FieldErrors = {
         name: pick("name"),
         description: pick("description"),
@@ -140,7 +206,7 @@ export default function MerchantOwnerStep() {
       return;
     }
 
-    const payload = buildPayload(result.data);
+    const payload = buildPayload(values);
 
     setLoading(true);
     try {
@@ -150,31 +216,31 @@ export default function MerchantOwnerStep() {
         body: JSON.stringify(payload),
       });
 
-      const text = await res.text();
-      let data: any = {};
+      let data: CreateTenantOk | ApiErrorPayload | null = null;
       try {
-        data = JSON.parse(text);
+        data = (await res.json()) as CreateTenantOk | ApiErrorPayload;
       } catch {
-        data = { raw: text };
+        data = null;
       }
 
       if (!res.ok) {
-        if (data?.details?.fieldErrors) {
-          setErrors(mapServerFieldErrors(data.details));
+        const details = (data as ApiErrorPayload | null)?.details;
+        if (details?.fieldErrors) {
+          setErrors(mapServerFieldErrors(details));
         }
         setTopError(
-          data?.error ||
-          (res.status === 403
-            ? "No tienes permiso para crear un restaurante."
-            : res.status === 409
+          (data as ApiErrorPayload | null)?.error ??
+            (res.status === 403
+              ? "No tienes permiso para crear un restaurante."
+              : res.status === 409
               ? "Ese nombre ya está en uso."
               : "No se pudo crear el restaurante.")
         );
-        console.error("[create tenant] status:", res.status, "payload:", payload, "server:", data);
         return;
       }
 
-      router.replace("/");
+      // OK
+      router.replace("/dashboard");
       router.refresh();
     } finally {
       setLoading(false);
@@ -200,8 +266,9 @@ export default function MerchantOwnerStep() {
             <div>
               <label className="block text-sm">Nombre *</label>
               <input
-                className={`mt-1 w-full rounded-xl border px-3 py-2 ${errors.name ? "border-red-500" : "border-zinc-300"
-                  }`}
+                className={`mt-1 w-full rounded-xl border px-3 py-2 ${
+                  errors.name ? "border-red-500" : "border-zinc-300"
+                }`}
                 value={values.name}
                 onChange={(e) => set("name", e.target.value)}
                 aria-invalid={Boolean(errors.name)}
@@ -212,8 +279,9 @@ export default function MerchantOwnerStep() {
             <div>
               <label className="block text-sm">Descripción (opcional)</label>
               <textarea
-                className={`mt-1 w-full rounded-xl border px-3 py-2 ${errors.description ? "border-red-500" : "border-zinc-300"
-                  }`}
+                className={`mt-1 w-full rounded-xl border px-3 py-2 ${
+                  errors.description ? "border-red-500" : "border-zinc-300"
+                }`}
                 rows={3}
                 value={values.description ?? ""}
                 onChange={(e) => set("description", e.target.value)}
@@ -226,8 +294,9 @@ export default function MerchantOwnerStep() {
             <div>
               <label className="block text-sm">Imagen (URL opcional)</label>
               <input
-                className={`mt-1 w-full rounded-xl border px-3 py-2 ${errors.imageUrl ? "border-red-500" : "border-zinc-300"
-                  }`}
+                className={`mt-1 w-full rounded-xl border px-3 py-2 ${
+                  errors.imageUrl ? "border-red-500" : "border-zinc-300"
+                }`}
                 placeholder="https://..."
                 value={values.imageUrl ?? ""}
                 onChange={(e) => set("imageUrl", e.target.value)}
@@ -243,9 +312,13 @@ export default function MerchantOwnerStep() {
                   type="checkbox"
                   checked={Boolean(values.useAddress)}
                   onChange={(e) => {
-                    set("useAddress", e.target.checked);
-                    if (!e.target.checked) set("address", undefined);
-                    else set("address", values.address ?? ({} as any));
+                    const checked = e.target.checked;
+                    set("useAddress", checked);
+                    if (!checked) {
+                      set("address", undefined);
+                    } else {
+                      set("address", values.address ?? {});
+                    }
                   }}
                 />
                 Agregar dirección principal ahora
@@ -267,8 +340,9 @@ export default function MerchantOwnerStep() {
                 <div>
                   <label className="block text-sm">Calle y número *</label>
                   <input
-                    className={`mt-1 w-full rounded-xl border px-3 py-2 ${errors["address.line1"] ? "border-red-500" : "border-zinc-300"
-                      }`}
+                    className={`mt-1 w-full rounded-xl border px-3 py-2 ${
+                      errors["address.line1"] ? "border-red-500" : "border-zinc-300"
+                    }`}
                     placeholder="Av. Reforma 123"
                     value={values.address?.line1 ?? ""}
                     onChange={(e) => setAddr("line1", e.target.value)}
@@ -282,8 +356,9 @@ export default function MerchantOwnerStep() {
                 <div>
                   <label className="block text-sm">Ciudad *</label>
                   <input
-                    className={`mt-1 w-full rounded-xl border px-3 py-2 ${errors["address.city"] ? "border-red-500" : "border-zinc-300"
-                      }`}
+                    className={`mt-1 w-full rounded-xl border px-3 py-2 ${
+                      errors["address.city"] ? "border-red-500" : "border-zinc-300"
+                    }`}
                     value={values.address?.city ?? ""}
                     onChange={(e) => setAddr("city", e.target.value)}
                   />
@@ -296,10 +371,11 @@ export default function MerchantOwnerStep() {
                   <div>
                     <label className="block text-sm">Código postal *</label>
                     <input
-                      className={`mt-1 w-full rounded-xl border px-3 py-2 ${errors["address.postalCode"]
+                      className={`mt-1 w-full rounded-xl border px-3 py-2 ${
+                        errors["address.postalCode"]
                           ? "border-red-500"
                           : "border-zinc-300"
-                        }`}
+                      }`}
                       value={values.address?.postalCode ?? ""}
                       onChange={(e) => setAddr("postalCode", e.target.value)}
                     />
@@ -312,8 +388,9 @@ export default function MerchantOwnerStep() {
                   <div>
                     <label className="block text-sm">País *</label>
                     <input
-                      className={`mt-1 w-full rounded-xl border px-3 py-2 ${errors["address.country"] ? "border-red-500" : "border-zinc-300"
-                        }`}
+                      className={`mt-1 w-full rounded-xl border px-3 py-2 ${
+                        errors["address.country"] ? "border-red-500" : "border-zinc-300"
+                      }`}
                       value={values.address?.country ?? ""}
                       onChange={(e) => setAddr("country", e.target.value)}
                     />

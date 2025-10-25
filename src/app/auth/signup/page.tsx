@@ -13,23 +13,25 @@ const tenantSchema = z.object({
   imageUrl: z.string().trim().url("URL inválida").max(2048).optional(),
 });
 
+type RegisterResponse =
+  | { ok: true; tenantId?: string | null }
+  | { error: string; details?: { fieldErrors?: Record<string, string[]> } };
+
 export default function SignUpPage() {
   const router = useRouter();
 
   // user
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [name, setName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const [role, setRole] = useState<RoleKey>("CUSTOMER");
 
-  // tenant (sólo si elige dueño)
-  const [tName, setTName] = useState("");
-  const [tDesc, setTDesc] = useState("");
-  const [tImage, setTImage] = useState("");
+  // tenant (sólo si dueño)
+  const [tName, setTName] = useState<string>("");
+  const [tDesc, setTDesc] = useState<string>("");
+  const [tImage, setTImage] = useState<string>("");
 
-  const [loading, setLoading] = useState(false);
-
-  // Errores simples en cliente (UX)
+  const [loading, setLoading] = useState<boolean>(false);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
   function clearErrors() {
@@ -38,21 +40,18 @@ export default function SignUpPage() {
 
   function destinationByRole(r: RoleKey, createdTenantId?: string | null) {
     if (r === "MERCHANT_OWNER") {
-      // si ya creamos tenant en el registro -> directo al dashboard
       if (createdTenantId) return "/dashboard";
-      // si no se mandó bloque del restaurante, vamos al paso 2
       return "/auth/signup/merchant-owner";
     }
     if (r === "COURIER") return "/auth/signup/courier";
     if (r === "MERCHANT_STAFF") return "/auth/signup/merchant-staff";
-    return "/"; // CUSTOMER
+    return "/";
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     clearErrors();
 
-    // Validación ligera en cliente (no sustituye la del servidor)
     if (name.trim().length < 2) {
       setErrors((p) => ({ ...p, name: "Tu nombre debe tener al menos 2 caracteres" }));
       return;
@@ -62,10 +61,10 @@ export default function SignUpPage() {
       return;
     }
 
-    // si es dueño y llenó "Nombre del restaurante", validamos ese bloque
+    // Validar bloque tenant si aplica
     let tenantPayload:
       | { name: string; description?: string; imageUrl?: string }
-      | undefined = undefined;
+      | undefined;
 
     if (role === "MERCHANT_OWNER" && tName.trim() !== "") {
       const tParse = tenantSchema.safeParse({
@@ -95,23 +94,28 @@ export default function SignUpPage() {
           email,
           password,
           role,
-          tenant: tenantPayload, // sólo si es dueño y lo llenó
+          tenant: tenantPayload,
         }),
       });
 
-      const data = await res.json().catch(() => ({} as any));
+      let data: RegisterResponse | null = null;
+      try {
+        data = (await res.json()) as RegisterResponse;
+      } catch {
+        data = null;
+      }
+
       if (!res.ok) {
-        // Mostrar errores del servidor si los manda
-        const det = (data?.details?.fieldErrors ?? {}) as Record<string, string[] | undefined>;
+        const det = data && "details" in data ? data.details?.fieldErrors : undefined;
         setErrors({
-          name: det.name?.[0],
-          email: det.email?.[0],
-          password: det.password?.[0],
-          tName: det["tenant.name"]?.[0] ?? det.name?.[0],
-          tDesc: det["tenant.description"]?.[0] ?? det.description?.[0],
-          tImage: det["tenant.imageUrl"]?.[0] ?? det.imageUrl?.[0],
+          name: det?.name?.[0],
+          email: det?.email?.[0],
+          password: det?.password?.[0],
+          tName: det?.["tenant.name"]?.[0] ?? det?.name?.[0],
+          tDesc: det?.["tenant.description"]?.[0] ?? det?.description?.[0],
+          tImage: det?.["tenant.imageUrl"]?.[0] ?? det?.imageUrl?.[0],
         });
-        alert(data?.error || "No se pudo crear la cuenta");
+        alert((data && "error" in data && data.error) || "No se pudo crear la cuenta");
         return;
       }
 
@@ -119,12 +123,14 @@ export default function SignUpPage() {
       const signed = await signIn("credentials", { email, password, redirect: false });
       const ok = !signed?.error;
 
-      const dest = destinationByRole(role, data?.tenantId);
+      const createdTenantId =
+        data && "ok" in data && data.ok ? (data.tenantId ?? null) : null;
+      const dest = destinationByRole(role, createdTenantId);
+
       if (ok) {
         router.replace(dest);
         router.refresh();
       } else {
-        // fallback: ir a signin con callback
         router.replace(`/auth/signin?callbackUrl=${encodeURIComponent(dest)}`);
       }
     } finally {
@@ -205,7 +211,6 @@ export default function SignUpPage() {
               </div>
             </div>
 
-            {/* Bloque restaurante si es dueño */}
             {role === "MERCHANT_OWNER" && (
               <fieldset className="mt-2 rounded-2xl border border-amber-200 p-4">
                 <legend className="px-2 text-sm font-semibold text-amber-700">Datos del restaurante (opcional)</legend>
