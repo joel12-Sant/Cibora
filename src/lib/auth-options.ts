@@ -1,7 +1,34 @@
-import type { NextAuthOptions } from "next-auth";
+// src/lib/auth-options.ts
+import type { NextAuthOptions, Session } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import type { JWT } from "next-auth/jwt";
+import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import bcrypt from "bcryptjs";
+
+/** Estructura de usuario que devolvemos en `authorize` */
+type AppUser = {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+  tenantId: string | null;
+};
+
+/** JWT extendido con nuestros campos */
+type AppJWT = JWT & {
+  role?: Role;
+  tenantId?: string | null;
+};
+
+/** Session con usuario extendido (sin module augmentation) */
+type AppSession = Session & {
+  user: NonNullable<Session["user"]> & {
+    id: string;
+    role: Role;
+    tenantId: string | null;
+  };
+};
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
@@ -12,9 +39,9 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
-        const email = credentials?.email;
-        const password = credentials?.password;
+      async authorize(credentials): Promise<AppUser | null> {
+        const email = credentials?.email ?? "";
+        const password = credentials?.password ?? "";
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
@@ -23,52 +50,66 @@ export const authOptions: NextAuthOptions = {
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return null;
 
-        // lo que pongas aquí queda en 'user' del callback jwt
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           role: user.role,
           tenantId: user.tenantId ?? null,
-        } as any;
+        };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user, trigger, session }) {
-      // En login
+      const t = token as AppJWT;
+
+      // Primer login: copiar datos del usuario autorizado
       if (user) {
-        const u = user as any;
-        (token as any).role = u.role ?? (token as any).role;
-        (token as any).tenantId = u.tenantId ?? (token as any).tenantId ?? null;
+        const u = user as AppUser;
+        t.role = u.role;
+        t.tenantId = u.tenantId ?? null;
       }
 
-      // En requests subsecuentes, mantener en sync con DB
+      // Peticiones subsecuentes: mantener sync con la BD
       if (!user && token.sub) {
         const dbUser = await prisma.user.findUnique({
           where: { id: token.sub },
           select: { role: true, tenantId: true },
         });
         if (dbUser) {
-          (token as any).role = dbUser.role;
-          (token as any).tenantId = dbUser.tenantId ?? null;
+          t.role = dbUser.role;
+          t.tenantId = dbUser.tenantId ?? null;
         }
       }
 
-      // Permitir useSession().update(...)
+      // Permitir useSession().update({ user: { role, tenantId } })
       if (trigger === "update" && session?.user) {
-        (token as any).role = (session.user as any).role ?? (token as any).role;
-        (token as any).tenantId = (session.user as any).tenantId ?? (token as any).tenantId;
+        const sUser = session.user as Partial<AppSession["user"]>;
+        if (sUser.role) t.role = sUser.role;
+        if (typeof sUser.tenantId !== "undefined") t.tenantId = sUser.tenantId;
       }
-      return token;
+
+      return t;
     },
+
     async session({ session, token }) {
-      if (session.user) {
-        (session.user as any).id = token.sub as string;
-        (session.user as any).role = (token as any).role;
-        (session.user as any).tenantId = (token as any).tenantId ?? null;
-      }
-      return session;
+      const t = token as AppJWT;
+
+      // Prevenir user indefinido
+      const baseUser = session.user ?? {};
+      const s = session as AppSession;
+
+      s.user = {
+        id: token.sub ?? "",
+        name: baseUser.name ?? null,
+        email: baseUser.email ?? null,
+        image: baseUser.image ?? null,
+        role: t.role ?? "CUSTOMER",
+        tenantId: t.tenantId ?? null,
+      };
+
+      return s;
     },
   },
 };
