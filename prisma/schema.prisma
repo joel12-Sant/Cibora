@@ -7,164 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id           String  @id @default(uuid())
-  email        String  @unique
-  name         String?
-  image        String?
-  passwordHash String?
-
-  role     Role    @default(CUSTOMER)
-  tenantId String?
-  tenant   Tenant? @relation(fields: [tenantId], references: [id])
-
-  accounts Account[]
-  sessions Session[]
-  orders   Order[]
-  carts    Cart[]   // 👈 NUEVO: carritos asociados al usuario
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @default(now()) @updatedAt
-}
-
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Tenant {
-  id        String       @id @default(uuid())
-  name      String
-  status    TenantStatus @default(PENDING)
-  users     User[]
-  menus     Menu[]
-  orders    Order[]
-  carts     Cart[]       // 👈 NUEVO: carritos por tenant
-  createdAt DateTime     @default(now())
-
-  // 👇 NUEVOS (opcionales)
-  imageUrl    String?
-  description String?
-}
-
-model VerificationToken {
-  identifier String
-  token      String   @unique
-  expires    DateTime
-
-  @@unique([identifier, token])
-}
-
-model Menu {
-  id       String     @id @default(uuid())
-  tenantId String
-  tenant   Tenant     @relation(fields: [tenantId], references: [id])
-  name     String
-  items    MenuItem[]
-}
-
-model MenuItem {
-  id     String  @id @default(uuid())
-  menuId String
-  menu   Menu    @relation(fields: [menuId], references: [id])
-  name   String
-  price  Int
-  active Boolean @default(true)
-
-  // 👇 NUEVOS (opcionales)
-  imageUrl    String?
-  description String?
-}
-
-model Order {
-  id        String      @id @default(uuid())
-  tenantId  String
-  tenant    Tenant      @relation(fields: [tenantId], references: [id])
-  userId    String
-  user      User        @relation(fields: [userId], references: [id])
-  status    OrderStatus @default(CREATED)
-  total     Int         @default(0)
-  items     OrderItem[]
-  payments  Payment[]   // contraparte de Payment.order
-  createdAt DateTime    @default(now())
-}
-
-model OrderItem {
-  id      String @id @default(uuid())
-  orderId String
-  order   Order  @relation(fields: [orderId], references: [id])
-  itemId  String
-  name    String
-  price   Int
-  qty     Int
-}
-
-model Payment {
-  id        String   @id @default(uuid())
-  orderId   String
-  order     Order    @relation(fields: [orderId], references: [id])
-  provider  String
-  status    String
-  intentId  String?
-  extRef    String?
-  createdAt DateTime @default(now())
-}
-
-// 👇👇👇 NUEVOS MODELOS PARA CARRITO PERSISTENTE
-model Cart {
-  id        String     @id @default(uuid())
-  userId    String
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  tenantId  String
-  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  status    CartStatus @default(ACTIVE)
-
-  items     CartItem[]
-
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @default(now()) @updatedAt
-
-  /// Evita múltiples carritos activos del mismo user en el mismo tenant
-  @@unique([userId, tenantId, status])
-}
-
-model CartItem {
-  id         String   @id @default(uuid())
-  cartId     String
-  cart       Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-
-  menuItemId String
-  // Snapshots para que el carrito no cambie si el menú cambia
-  name       String
-  price      Int
-  qty        Int
-
-  createdAt  DateTime @default(now())
-}
-
+/**
+ * =========================
+ * ENUMS
+ * =========================
+ */
 enum Role {
   ADMIN
   MERCHANT_OWNER
@@ -192,4 +39,198 @@ enum CartStatus {
   ACTIVE
   ABANDONED
   CONVERTED
+}
+
+enum VehicleType {
+  MOTORCYCLE
+  CAR
+}
+
+/**
+ * =========================
+ * MODELOS
+ * =========================
+ */
+
+model User {
+  id           String  @id @default(uuid())
+  email        String  @unique
+  name         String
+  image        String?
+  passwordHash String
+
+  role     Role    @default(CUSTOMER)
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  // Dirección: múltiples direcciones (opcional)
+  addresses Address[]
+
+  // Courier: tipo de vehículo (opcional)
+  vehicleType VehicleType?
+
+  orders Order[]
+  carts  Cart[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+}
+
+model Tenant {
+  id        String       @id @default(uuid())
+  name      String
+  status    TenantStatus @default(PENDING)
+  users     User[]
+  menus     Menu[]
+  orders    Order[]
+  carts     Cart[]
+  createdAt DateTime     @default(now())
+
+  // Opcionales existentes
+  imageUrl    String?
+  description String?
+
+  // Dirección: múltiples direcciones (opcional)
+  addresses Address[]
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  // Prisma requiere un ID: usamos compuesto (recomendado)
+  @@id([identifier, token])
+  @@index([expires])
+}
+
+model Menu {
+  id       String     @id @default(uuid())
+  tenantId String
+  tenant   Tenant     @relation(fields: [tenantId], references: [id])
+  name     String
+  items    MenuItem[]
+}
+
+model MenuItem {
+  id     String  @id @default(uuid())
+  menuId String
+  menu   Menu    @relation(fields: [menuId], references: [id])
+  name   String
+  price  Int
+  active Boolean @default(true)
+
+  // Opcionales
+  imageUrl    String?
+  description String?
+}
+
+model Order {
+  id        String      @id @default(uuid())
+  tenantId  String
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  status    OrderStatus @default(CREATED)
+  total     Int         @default(0)
+  items     OrderItem[]
+  payments  Payment[]
+  createdAt DateTime    @default(now())
+}
+
+model OrderItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+  itemId  String // snapshot de origen (sin FK a MenuItem)
+  name    String
+  price   Int
+  qty     Int
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  provider  String
+  status    String
+  intentId  String?
+  extRef    String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+}
+
+/**
+ * =========================
+ * CARRITO PERSISTENTE
+ * =========================
+ */
+model Cart {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  status CartStatus @default(ACTIVE)
+  items  CartItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  /// Evita múltiples carritos por estado del mismo user en el mismo tenant
+  @@unique([userId, tenantId, status])
+  @@index([userId])
+  @@index([tenantId])
+}
+
+model CartItem {
+  id     String @id @default(uuid())
+  cartId String
+  cart   Cart   @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  menuItemId String // snapshot de origen (sin FK a MenuItem)
+  name       String
+  price      Int
+  qty        Int
+
+  createdAt DateTime @default(now())
+}
+
+/**
+ * =========================
+ * DIRECCIONES (compartido)
+ * =========================
+ */
+model Address {
+  id String @id @default(uuid())
+
+  // Propietario: user o tenant (uno u otro)
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  label      String? // "Casa", "Trabajo", "Sucursal Centro", etc.
+  line1      String // calle y número
+  line2      String?
+  city       String
+  state      String?
+  postalCode String
+  country    String
+
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+
+  isPrimary Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([userId])
+  @@index([tenantId])
+  @@index([isPrimary])
 }

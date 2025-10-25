@@ -1,18 +1,8 @@
-// src/app/api/cart/merge/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { cartResponseSchema, mergeSchema } from "@/lib/cart-types";
 
-/**
- * POST /api/cart/merge
- * Body: { tenantId, items: [{ menuItemId, qty }] }
- * IDEMPOTENTE:
- *  - Si ya existe item en BD => qty_final = MAX(qty_server, qty_local)
- *  - Si no existe => se crea con qty_local
- *  - Snapshot name/price se actualiza con el MenuItem actual
- * Devuelve { items: [{ menuItemId, name, price, qty }] }
- */
 export async function POST(req: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;

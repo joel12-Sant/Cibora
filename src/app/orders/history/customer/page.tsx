@@ -111,7 +111,7 @@ export default async function OrdersHistoryPage({ searchParams }: Props) {
               <li className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/60 p-6 text-sm text-zinc-700">
                 Aún no tienes pedidos.{" "}
                 <Link
-                  href="/restaurants"
+                  href="/"
                   className="font-semibold text-orange-700 underline underline-offset-2 hover:opacity-90"
                 >
                   Explora restaurantes →
