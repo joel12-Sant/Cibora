@@ -13,30 +13,48 @@ const menuSchema = z.object({
     .max(100, "Máximo 100 caracteres"),
 });
 
+/** Helper: type guard para objetos */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
 /** Normaliza respuestas { error, details.fieldErrors } del backend */
-function normalizeErrorMessage(data: unknown, fallback = "No se pudo crear el menú."): {
+function normalizeErrorMessage(
+  data: unknown,
+  fallback = "No se pudo crear el menú."
+): {
   error?: string;
   fieldErrors?: Record<string, string[]>;
 } {
   if (typeof data === "string") return { error: data };
-  if (data && typeof data === "object") {
-    const anyData = data as any;
-    if (typeof anyData.error === "string") {
-      return { error: anyData.error, fieldErrors: anyData.details?.fieldErrors };
+  if (isRecord(data)) {
+    const err = (data as { error?: unknown }).error;
+    const details = (data as { details?: { fieldErrors?: Record<string, string[]> } }).details;
+
+    if (typeof err === "string") {
+      return { error: err, fieldErrors: details?.fieldErrors };
     }
-    if (anyData.details?.fieldErrors) {
-      return { error: fallback, fieldErrors: anyData.details.fieldErrors as Record<string, string[]> };
+    if (details?.fieldErrors) {
+      return { error: fallback, fieldErrors: details.fieldErrors };
     }
   }
   return { error: fallback };
 }
 
 /** Extrae id de { id } | { menuId } | { menu:{id} } */
-function extractMenuId(payload: any): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  if (typeof payload.id === "string") return payload.id;
-  if (typeof payload.menuId === "string") return payload.menuId;
-  if (payload.menu && typeof payload.menu.id === "string") return payload.menu.id;
+function extractMenuId(payload: unknown): string | null {
+  if (!isRecord(payload)) return null;
+
+  if (typeof (payload as Record<string, unknown>).id === "string") {
+    return (payload as { id: string }).id;
+  }
+  if (typeof (payload as Record<string, unknown>).menuId === "string") {
+    return (payload as { menuId: string }).menuId;
+  }
+  const menu = (payload as { menu?: unknown }).menu;
+  if (isRecord(menu) && typeof (menu as Record<string, unknown>).id === "string") {
+    return (menu as { id: string }).id;
+  }
   return null;
 }
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { z } from "zod";
 import { formatMXN } from "@/lib/money";
 
@@ -46,25 +45,34 @@ const itemSchema = z.object({
     .or(z.literal("").transform(() => undefined)),
 });
 
-function normalizeErrorMessage(data: unknown, fallback = "Ocurrió un error.") {
+// helper de tipo seguro
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function normalizeErrorMessage(data: unknown, fallback = "Ocurrió un error."): string {
   if (typeof data === "string") return data;
-  if (data && typeof data === "object") {
-    const anyData = data as any;
-    if (typeof anyData.error === "string") return anyData.error;
-    if (anyData.details?.fieldErrors) {
-      const fe = anyData.details.fieldErrors as Record<string, string[]>;
-      const first = Object.values(fe)[0]?.[0];
-      if (first) return first;
-    }
+  if (isRecord(data)) {
+    const err = (data as { error?: unknown }).error;
+    if (typeof err === "string") return err;
+
+    const details = (data as { details?: { fieldErrors?: Record<string, string[]> } }).details;
+    const fe = details?.fieldErrors;
+    const first = fe ? Object.values(fe)[0]?.[0] : undefined;
+    if (first) return first;
   }
   return fallback;
 }
 
 export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuData }) {
-  const router = useRouter();
-
   const [items, setItems] = useState<Item[]>(initialMenu.items);
-  const [form, setForm] = useState<{ name: string; price: string; imageUrl: string; description: string; active: boolean }>({
+  const [form, setForm] = useState<{
+    name: string;
+    price: string;
+    imageUrl: string;
+    description: string;
+    active: boolean;
+  }>({
     name: "",
     price: "",
     imageUrl: "",
@@ -77,7 +85,13 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
 
   // Edición inline
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<{ name: string; price: string; imageUrl: string; description: string; active: boolean }>({
+  const [editData, setEditData] = useState<{
+    name: string;
+    price: string;
+    imageUrl: string;
+    description: string;
+    active: boolean;
+  }>({
     name: "",
     price: "",
     imageUrl: "",
@@ -88,7 +102,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
   const [editErr, setEditErr] = useState<string | null>(null);
   const [editFieldErr, setEditFieldErr] = useState<Record<string, string | undefined>>({});
 
-  // 🔁 NUEVO: resincroniza estado cuando cambia el menú seleccionado
+  // 🔁 Re-sincroniza estado cuando cambia el menú seleccionado
   useEffect(() => {
     setItems(initialMenu.items);
     setEditingId(null);
@@ -132,14 +146,20 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
       let data: unknown = null;
       try {
         data = await res.json();
-      } catch {}
+      } catch {
+        // respuesta sin body
+      }
 
       if (!res.ok) {
         setFormErr(normalizeErrorMessage(data, "No se pudo crear el ítem."));
         return;
       }
 
-      const newId = (data as any)?.id as string | undefined;
+      const newId =
+        isRecord(data) && typeof (data as Record<string, unknown>).id === "string"
+          ? (data as { id: string }).id
+          : undefined;
+
       const created: Item = {
         id: newId ?? crypto.randomUUID(),
         name: parsed.data.name,
@@ -183,7 +203,11 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
       cache: "no-store",
     });
     let data: unknown = null;
-    try { data = await res.json(); } catch {}
+    try {
+      data = await res.json();
+    } catch {
+      // sin body
+    }
     if (!res.ok) throw new Error(normalizeErrorMessage(data, "No se pudo actualizar el ítem."));
     return true;
   }
@@ -195,16 +219,19 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
     setEditErr(null);
     setEditFieldErr({});
 
-    const parsed = itemSchema.partial().extend({
-      name: itemSchema.shape.name.optional(),
-      price: itemSchema.shape.price.optional(),
-    }).safeParse({
-      name: editData.name,
-      price: editData.price,
-      imageUrl: editData.imageUrl,
-      description: editData.description,
-      active: editData.active,
-    });
+    const parsed = itemSchema
+      .partial()
+      .extend({
+        name: itemSchema.shape.name.optional(),
+        price: itemSchema.shape.price.optional(),
+      })
+      .safeParse({
+        name: editData.name,
+        price: editData.price,
+        imageUrl: editData.imageUrl,
+        description: editData.description,
+        active: editData.active,
+      });
 
     if (!parsed.success) {
       const f = parsed.error.flatten().fieldErrors;
@@ -219,10 +246,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
     }
 
     try {
-      await patchItem(
-        { id: editingId } as Item,
-        parsed.data as Partial<Item>
-      );
+      await patchItem({ id: editingId } as Item, parsed.data as Partial<Item>);
 
       setItems((prev) =>
         prev
@@ -231,10 +255,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
               ? {
                   ...x,
                   ...parsed.data,
-                  price:
-                    parsed.data.price !== undefined
-                      ? Number(parsed.data.price)
-                      : x.price,
+                  price: parsed.data.price !== undefined ? Number(parsed.data.price) : x.price,
                 }
               : x
           )
@@ -242,8 +263,9 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
       );
 
       cancelEdit();
-    } catch (err: any) {
-      setEditErr(err.message || "No se pudo actualizar el ítem.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "No se pudo actualizar el ítem.";
+      setEditErr(msg);
       setEditing(false);
     }
   }
@@ -251,11 +273,10 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
   async function toggleActive(it: Item) {
     try {
       await patchItem(it, { active: !it.active });
-      setItems((prev) =>
-        prev.map((x) => (x.id === it.id ? { ...x, active: !x.active } : x))
-      );
-    } catch (err: any) {
-      alert(err.message || "No se pudo actualizar el estado.");
+      setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, active: !x.active } : x)));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "No se pudo actualizar el estado.";
+      alert(msg);
     }
   }
 
@@ -267,7 +288,11 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
     });
     if (!res.ok) {
       let data: unknown = null;
-      try { data = await res.json(); } catch {}
+      try {
+        data = await res.json();
+      } catch {
+        // sin body
+      }
       alert(normalizeErrorMessage(data, "No se pudo eliminar el ítem."));
       return;
     }
@@ -280,7 +305,8 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
       <section className="rounded-2xl border border-amber-100 bg-white/90 p-4 shadow-sm">
         <h2 className="text-base font-semibold text-zinc-900">Agregar ítem</h2>
         <p className="mt-1 text-sm text-zinc-600">
-          Completa los campos para añadir un nuevo platillo a <span className="font-medium">{initialMenu.name}</span>.
+          Completa los campos para añadir un nuevo platillo a{" "}
+          <span className="font-medium">{initialMenu.name}</span>.
         </p>
 
         {formErr && (
@@ -322,9 +348,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
               placeholder="12000"
             />
             {fieldErr.price && <p className="mt-1 text-xs text-red-600">{fieldErr.price}</p>}
-            <p className="mt-1 text-xs text-zinc-500">
-              Se guarda en centavos. Ej: 12000 = {formatMXN(12000)}
-            </p>
+            <p className="mt-1 text-xs text-zinc-500">Se guarda en centavos. Ej: 12000 = {formatMXN(12000)}</p>
           </div>
 
           <div>
@@ -338,9 +362,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
               aria-invalid={Boolean(fieldErr.imageUrl)}
               placeholder="https://..."
             />
-            {fieldErr.imageUrl && (
-              <p className="mt-1 text-xs text-red-600">{fieldErr.imageUrl}</p>
-            )}
+            {fieldErr.imageUrl && <p className="mt-1 text-xs text-red-600">{fieldErr.imageUrl}</p>}
           </div>
 
           <div>
@@ -355,9 +377,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
               aria-invalid={Boolean(fieldErr.description)}
               placeholder="Tortilla de maíz, cerdo marinado, piña, cebolla y cilantro."
             />
-            {fieldErr.description && (
-              <p className="mt-1 text-xs text-red-600">{fieldErr.description}</p>
-            )}
+            {fieldErr.description && <p className="mt-1 text-xs text-red-600">{fieldErr.description}</p>}
           </div>
 
           <label className="inline-flex items-center gap-2 text-sm">
@@ -416,9 +436,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
                           onChange={(e) => setEditData((p) => ({ ...p, name: e.target.value }))}
                           aria-invalid={Boolean(editFieldErr.name)}
                         />
-                        {editFieldErr.name && (
-                          <p className="mt-1 text-xs text-red-600">{editFieldErr.name}</p>
-                        )}
+                        {editFieldErr.name && <p className="mt-1 text-xs text-red-600">{editFieldErr.name}</p>}
                       </div>
                       <div>
                         <label className="block text-sm">Precio (centavos) *</label>
@@ -432,9 +450,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
                           onChange={(e) => setEditData((p) => ({ ...p, price: e.target.value }))}
                           aria-invalid={Boolean(editFieldErr.price)}
                         />
-                        {editFieldErr.price && (
-                          <p className="mt-1 text-xs text-red-600">{editFieldErr.price}</p>
-                        )}
+                        {editFieldErr.price && <p className="mt-1 text-xs text-red-600">{editFieldErr.price}</p>}
                         <p className="mt-1 text-xs text-zinc-500">
                           {editData.price ? formatMXN(Number(editData.price)) : ""}
                         </p>
@@ -449,14 +465,10 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
                             editFieldErr.imageUrl ? "border-red-500" : "border-zinc-300"
                           }`}
                           value={editData.imageUrl}
-                          onChange={(e) =>
-                            setEditData((p) => ({ ...p, imageUrl: e.target.value }))
-                          }
+                          onChange={(e) => setEditData((p) => ({ ...p, imageUrl: e.target.value }))}
                           aria-invalid={Boolean(editFieldErr.imageUrl)}
                         />
-                        {editFieldErr.imageUrl && (
-                          <p className="mt-1 text-xs text-red-600">{editFieldErr.imageUrl}</p>
-                        )}
+                        {editFieldErr.imageUrl && <p className="mt-1 text-xs text-red-600">{editFieldErr.imageUrl}</p>}
                       </div>
                       <div>
                         <label className="block text-sm">Descripción</label>
@@ -465,9 +477,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
                             editFieldErr.description ? "border-red-500" : "border-zinc-300"
                           }`}
                           value={editData.description}
-                          onChange={(e) =>
-                            setEditData((p) => ({ ...p, description: e.target.value }))
-                          }
+                          onChange={(e) => setEditData((p) => ({ ...p, description: e.target.value }))}
                           aria-invalid={Boolean(editFieldErr.description)}
                         />
                         {editFieldErr.description && (

@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ id: menu.id, name: menu.name }, { status: 201 });
-  } catch (e) {
+  } catch {
     return NextResponse.json({ error: "No se pudo crear el menú" }, { status: 500 });
   }
 }
