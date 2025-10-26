@@ -47,9 +47,9 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   CANCELED: "Cancelada",
 };
 
-function statusLabel(s: OrderStatus) {
+{/*function statusLabel(s: OrderStatus) {
   return STATUS_LABELS[s] ?? String(s);
-}
+}*/}
 
 export default async function DashboardPage({ searchParams }: Props) {
   const session = await auth();
