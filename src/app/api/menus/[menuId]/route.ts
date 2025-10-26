@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -7,14 +7,24 @@ import { Role } from "@prisma/client";
 const ALLOWED = new Set<Role>(["MERCHANT_OWNER", "MERCHANT_STAFF", "ADMIN"] as const);
 
 const patchMenuSchema = z.object({
-  name: z.string().trim().min(2, "El nombre debe tener al menos 2 caracteres").max(100, "Máximo 100 caracteres").optional(),
+  name: z
+    .string()
+    .trim()
+    .min(2, "El nombre debe tener al menos 2 caracteres")
+    .max(100, "Máximo 100 caracteres")
+    .optional(),
 });
 
 function fieldError(details: Record<string, string[]> = {}) {
   return { details: { fieldErrors: details } };
 }
 
-export async function GET(_req: Request, { params }: { params: { menuId: string } }) {
+export async function GET(
+  _req: NextRequest,
+  ctx: { params: Promise<{ menuId: string }> }
+) {
+  const { menuId } = await ctx.params;
+
   const session = await auth();
   const user = session?.user ?? null;
 
@@ -24,13 +34,20 @@ export async function GET(_req: Request, { params }: { params: { menuId: string 
   }
 
   const menu = await prisma.menu.findFirst({
-    where: { id: params.menuId, tenantId: user.tenantId },
+    where: { id: menuId, tenantId: user.tenantId },
     select: {
       id: true,
       name: true,
       items: {
         orderBy: { name: "asc" },
-        select: { id: true, name: true, price: true, active: true, imageUrl: true, description: true },
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          active: true,
+          imageUrl: true,
+          description: true,
+        },
       },
     },
   });
@@ -39,7 +56,12 @@ export async function GET(_req: Request, { params }: { params: { menuId: string 
   return NextResponse.json({ menu }, { status: 200 });
 }
 
-export async function PATCH(req: Request, { params }: { params: { menuId: string } }) {
+export async function PATCH(
+  req: NextRequest,
+  ctx: { params: Promise<{ menuId: string }> }
+) {
+  const { menuId } = await ctx.params;
+
   const session = await auth();
   const user = session?.user ?? null;
 
@@ -58,16 +80,22 @@ export async function PATCH(req: Request, { params }: { params: { menuId: string
   const parsed = patchMenuSchema.safeParse(body);
   if (!parsed.success) {
     const f = parsed.error.flatten().fieldErrors;
-    return NextResponse.json({ error: "Validación fallida", ...fieldError({ name: f.name ?? [] }) }, { status: 400 });
+    return NextResponse.json(
+      { error: "Validación fallida", ...fieldError({ name: f.name ?? [] }) },
+      { status: 400 }
+    );
   }
 
   // Asegurar ownership
-  const exists = await prisma.menu.findFirst({ where: { id: params.menuId, tenantId: user.tenantId }, select: { id: true } });
+  const exists = await prisma.menu.findFirst({
+    where: { id: menuId, tenantId: user.tenantId },
+    select: { id: true },
+  });
   if (!exists) return NextResponse.json({ error: "Menú no encontrado" }, { status: 404 });
 
   try {
     const menu = await prisma.menu.update({
-      where: { id: params.menuId },
+      where: { id: menuId },
       data: { ...(parsed.data.name ? { name: parsed.data.name } : {}) },
       select: { id: true, name: true },
     });
@@ -77,7 +105,12 @@ export async function PATCH(req: Request, { params }: { params: { menuId: string
   }
 }
 
-export async function DELETE(_req: Request, { params }: { params: { menuId: string } }) {
+export async function DELETE(
+  _req: NextRequest,
+  ctx: { params: Promise<{ menuId: string }> }
+) {
+  const { menuId } = await ctx.params;
+
   const session = await auth();
   const user = session?.user ?? null;
 
@@ -87,15 +120,17 @@ export async function DELETE(_req: Request, { params }: { params: { menuId: stri
   }
 
   // Asegurar ownership
-  const menu = await prisma.menu.findFirst({ where: { id: params.menuId, tenantId: user.tenantId }, select: { id: true } });
+  const menu = await prisma.menu.findFirst({
+    where: { id: menuId, tenantId: user.tenantId },
+    select: { id: true },
+  });
   if (!menu) return NextResponse.json({ error: "Menú no encontrado" }, { status: 404 });
 
   try {
     await prisma.$transaction([
-      prisma.menuItem.deleteMany({ where: { menuId: params.menuId } }),
-      prisma.menu.delete({ where: { id: params.menuId } }),
+      prisma.menuItem.deleteMany({ where: { menuId } }),
+      prisma.menu.delete({ where: { id: menuId } }),
     ]);
-
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch {
     return NextResponse.json({ error: "No se pudo eliminar el menú" }, { status: 500 });
