@@ -38,14 +38,14 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
 };
 
 // Etiquetas legibles en español:
-const STATUS_LABELS: Record<OrderStatus, string> = {
+{/*const STATUS_LABELS: Record<OrderStatus, string> = {
   CREATED: "Creada",
   PAID: "Pagada",
   PREPARING: "Preparando",
   OUT_FOR_DELIVERY: "En camino",
   DELIVERED: "Entregada",
   CANCELED: "Cancelada",
-};
+};*/}
 
 {/*function statusLabel(s: OrderStatus) {
   return STATUS_LABELS[s] ?? String(s);
@@ -191,7 +191,7 @@ export default async function DashboardPage({ searchParams }: Props) {
                         {o._count.items} ítems
                         <span className="mx-2 text-zinc-400">•</span>
                         <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${STATUS_LABELS[o.status]}`}
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${STATUS_STYLES[o.status]}`}
                         >
                           {o.status}
                         </span>
