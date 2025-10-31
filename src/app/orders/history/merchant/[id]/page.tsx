@@ -7,7 +7,7 @@ import { formatMXN } from "@/lib/money";
 
 type Props = { params: Promise<{ id: string }> };
 
-export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic"; 
 
 export default async function OrderDetailPage({ params }: Props) {
   const { id } = await params;
@@ -50,7 +50,9 @@ export default async function OrderDetailPage({ params }: Props) {
   const timeline = computeTimeline(order.status, order.createdAt);
 
   return (
-    <main className="mx-auto max-w-3xl p-6 space-y-6">
+    <main className="min-h-[100svh] bg-gradient-to-b from-amber-200 via-orange-100 to-amber-50 text-zinc-900">
+      <section className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-5 sm:p-6 md:p-8">
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Pedido #{order.id.slice(0, 8)}</h1>
@@ -61,17 +63,17 @@ export default async function OrderDetailPage({ params }: Props) {
         <Link href="/orders/history/merchant" className="underline">Volver</Link>
       </header>
 
-      <section className="rounded-xl border p-4">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm mt-6">
         <div className="flex items-center justify-between">
           <div className="space-y-1">
             <p className="text-sm opacity-70">Estado actual</p>
-            <p className="text-lg font-medium">{order.status}</p>
+            <p className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">{order.status}</p>
           </div>
           <OrderStatusActions orderId={order.id} initialStatus={order.status} />
         </div>
       </section>
 
-      <section className="rounded-xl border p-4">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm mt-6">
         <h2 className="mb-3 font-medium">Ítems</h2>
         <ul className="divide-y">
           {order.items.map((it) => (
@@ -92,7 +94,7 @@ export default async function OrderDetailPage({ params }: Props) {
         </div>
       </section>
 
-      <section className="rounded-xl border p-4">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm mt-6">
         <h2 className="mb-3 font-medium">Pagos</h2>
         {order.payments.length === 0 ? (
           <p className="opacity-70 text-sm">Sin pagos registrados.</p>
@@ -111,7 +113,7 @@ export default async function OrderDetailPage({ params }: Props) {
         )}
       </section>
 
-      <section className="rounded-xl border p-4">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm mt-6">
         <h2 className="mb-3 font-medium">Línea de tiempo</h2>
         <ol className="relative ml-3 border-l pl-5">
           {timeline.map((t) => (
@@ -129,6 +131,8 @@ export default async function OrderDetailPage({ params }: Props) {
           Ver confirmación pública
         </Link>
       </div>
+      </div>
+      </section>
     </main>
   );
 }

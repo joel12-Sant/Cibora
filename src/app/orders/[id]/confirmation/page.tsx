@@ -44,6 +44,8 @@ export default async function OrderConfirmationPage({ params }: Props) {
 
   return (
     <main className="min-h-[100svh] bg-gradient-to-b from-amber-200 via-orange-100 to-amber-50 text-zinc-900">
+      <section className="mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+        <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-5 sm:p-6 md:p-8">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Confirmación de pedido</h1>
         <p className="text-sm opacity-70">
@@ -52,9 +54,9 @@ export default async function OrderConfirmationPage({ params }: Props) {
       </header>
 
       {/* Estado / Mensaje */}
-      <section className="rounded-xl border p-4">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
         <p className="text-lg">
-          Estado de la orden: <span className="font-semibold">{order.status}</span>
+          Estado de la orden: <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">{order.status}</span>
         </p>
         {payment && (
           <p className="text-sm opacity-70 mt-1">
@@ -71,8 +73,8 @@ export default async function OrderConfirmationPage({ params }: Props) {
 
       {/* Lista de artículos */}
       <section>
-        <h2 className="mb-2 font-medium">Artículos</h2>
-        <ul className="divide-y rounded-xl border">
+        <h2 className="text-2xl font-semibold">Artículos</h2>
+        <ul className="divide-y rounded-xl border border-zinc-200 bg-white shadow-sm">
           {order.items.map((it) => (
             <li key={it.id} className="flex items-center justify-between p-3">
               <div className="space-y-0.5">
@@ -92,14 +94,16 @@ export default async function OrderConfirmationPage({ params }: Props) {
       </section>
 
       {/* Total */}
-      <section className="flex items-center justify-end">
-        <div className="rounded-full border px-4 py-2 text-sm">
+      <section className="flex items-center justify-end mt-6">
+        <div className=" rounded-xl border border-zinc-200 bg-white shadow-sm px-6 py-3 text-sm">
           Total: <span className="font-semibold">{formatMXN(order.total)}</span>
         </div>
       </section>
 
       {/* Refresher (solo si hace falta) */}
       {needsRefresh && <ClientStatusRefresher orderId={order.id} />}
+      </div>
+      </section>
     </main>
   );
 }
