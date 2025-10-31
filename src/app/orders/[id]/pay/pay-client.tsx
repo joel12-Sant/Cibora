@@ -88,7 +88,7 @@ function CheckoutForm({ orderId }: { orderId: string }) {
           Ingresa los datos de tu tarjeta para completar tu compra.
         </p>
 
-        {/* Stripe PaymentElement (responsivo por defecto) */}
+        {/* Stripe PaymentElement*/}
         <div className="mt-4">
           <PaymentElement id="payment-element" />
         </div>
@@ -106,7 +106,6 @@ function CheckoutForm({ orderId }: { orderId: string }) {
 
         {/* Acciones */}
         <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          {/* Botón primario acorde a la receta */}
           <button
             type="submit"
             disabled={!stripe || submitting}

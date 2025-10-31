@@ -18,10 +18,7 @@ export default function SignOutButton({
 
   useEffect(() => setMounted(true), []);
 
-  // Para que el HTML SSR y el 1er render del cliente coincidan,
-  // no renderizamos el botón hasta que el componente esté montado.
   if (!mounted) {
-    // Placeholder opcional para evitar "brincos" de layout
     return <span className="inline-block h-9" aria-hidden="true" />;
   }
 
