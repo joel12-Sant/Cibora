@@ -43,7 +43,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
   );
 
   return (
-    <main className="mx-auto max-w-3xl p-6 space-y-6">
+    <main className="min-h-[100svh] bg-gradient-to-b from-amber-200 via-orange-100 to-amber-50 text-zinc-900">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Confirmación de pedido</h1>
         <p className="text-sm opacity-70">
@@ -103,3 +103,4 @@ export default async function OrderConfirmationPage({ params }: Props) {
     </main>
   );
 }
+
