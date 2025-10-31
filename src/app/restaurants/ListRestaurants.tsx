@@ -21,8 +21,9 @@ export default async function RestaurantsPage() {
         <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-4 sm:p-6 md:p-8">
           <header className="flex items-center justify-between">
             <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Restaurantes</h1>
+            <StyleButton href="/cart" label="ver carrito" text="ver carrito" />
           </header>
-          
+
           <p className="mt-2 text-sm text-zinc-600">Elige tu lugar favorito y ordena en minutos.</p>
 
           <RestaurantsExplorer restaurants={restaurants} />

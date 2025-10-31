@@ -1,4 +1,3 @@
-// src/app/orders/[id]/confirmation/page.tsx
 import { prisma } from "@/lib/db";
 import { formatMXN } from "@/lib/money";
 import ClientStatusRefresher from "./refresher";

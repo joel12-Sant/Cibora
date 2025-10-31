@@ -1,5 +1,3 @@
-// src/features/orders/QuickBuy.tsx
-
 "use client";
 
 import { useState } from "react";
@@ -23,7 +21,7 @@ export default function QuickBuy({ tenantId, itemId }: Props) {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error ?? "Order failed");
-      const id = json.orderId ?? json.order?.id; // 👈 soporta ambos contratos
+      const id = json.orderId ?? json.order?.id;
       if (!id) throw new Error("Order id missing");
       setOk(id);
     } catch (e: unknown) {
