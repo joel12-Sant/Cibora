@@ -53,7 +53,7 @@ export default async function OrderConfirmationPage({ params }: Props) {
       </header>
 
       {/* Estado / Mensaje */}
-      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm mt-6">
         <p className="text-lg">
           Estado de la orden: <span className="inline-flex items-center rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-800">{order.status}</span>
         </p>
@@ -72,10 +72,10 @@ export default async function OrderConfirmationPage({ params }: Props) {
 
       {/* Lista de artículos */}
       <section>
-        <h2 className="text-2xl font-semibold">Artículos</h2>
-        <ul className="divide-y rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <h2 className="text-2xl font-semibold mt-6">Artículos</h2>
+        <ul className="divide-y rounded-xl border border-zinc-200 bg-white shadow-sm mt-2">
           {order.items.map((it) => (
-            <li key={it.id} className="flex items-center justify-between p-3">
+            <li key={it.id} className="flex items-center justify-between p-3 mt-1">
               <div className="space-y-0.5">
                 <p className="font-medium">{it.name}</p>
                 <p className="text-sm opacity-70">Cantidad: {it.qty}</p>
