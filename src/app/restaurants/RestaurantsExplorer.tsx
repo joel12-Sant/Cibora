@@ -29,15 +29,7 @@ export default function RestaurantsExplorer({ restaurants }: { restaurants: Rest
 
   const [q, setQ] = useState(() => searchParams.get("q") ?? "");
 
-  useEffect(() => {
-    const id = setTimeout(() => {
-      const params = new URLSearchParams(searchParams);
-      if (q) params.set("q", q);
-      else params.delete("q");
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    }, 200);
-    return () => clearTimeout(id);
-  }, [q]);
+
 
   const filtered = useMemo(
     () => restaurants.filter((r) => isSubsequence(q, r.name)),

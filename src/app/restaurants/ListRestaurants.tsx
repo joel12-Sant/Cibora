@@ -1,5 +1,6 @@
 import Link from "next/link";
 import RestaurantsExplorer from "@/app/restaurants/RestaurantsExplorer";
+import StyleButton from "@/components/style-button"
 
 type Restaurant = { id: string; name: string; description: string; imageURL: string };
 
@@ -20,15 +21,8 @@ export default async function RestaurantsPage() {
         <div className="rounded-3xl bg-white/90 ring-1 ring-amber-100 shadow-lg backdrop-blur-sm p-4 sm:p-6 md:p-8">
           <header className="flex items-center justify-between">
             <h1 className="text-xl md:text-2xl font-extrabold tracking-tight">Restaurantes</h1>
-            <Link
-              href="/cart"
-              aria-label="Ver carrito"
-              className="inline-flex items-center rounded-full px-4 py-2 text-sm font-semibold bg-amber-500 text-white no-underline hover:text-orange-700 hover:bg-orange-50 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
-            >
-              Ver carrito
-            </Link>
           </header>
-
+          
           <p className="mt-2 text-sm text-zinc-600">Elige tu lugar favorito y ordena en minutos.</p>
 
           <RestaurantsExplorer restaurants={restaurants} />

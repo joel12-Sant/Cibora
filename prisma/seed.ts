@@ -22,7 +22,7 @@ function range(n: number) {
 // catálogo base
 // =====================
 type TenantSeed = {
-  key: string; // para construir emails únicos
+  key: string;
   name: string;
   description: string;
   imageUrl: string;
