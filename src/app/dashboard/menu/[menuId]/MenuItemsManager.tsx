@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { z } from "zod";
 import { formatMXN } from "@/lib/money";
+import { Sparkles, Loader2 } from "lucide-react";
 
 type Item = {
   id: string;
@@ -82,6 +83,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
   const [submitting, setSubmitting] = useState(false);
   const [formErr, setFormErr] = useState<string | null>(null);
   const [fieldErr, setFieldErr] = useState<Record<string, string | undefined>>({});
+  const [generatingAI, setGeneratingAI] = useState(false);
 
   // Edición inline
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -101,6 +103,7 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
   const [editing, setEditing] = useState(false);
   const [editErr, setEditErr] = useState<string | null>(null);
   const [editFieldErr, setEditFieldErr] = useState<Record<string, string | undefined>>({});
+  const [generatingEditAI, setGeneratingEditAI] = useState(false);
 
   // 🔁 Re-sincroniza estado cuando cambia el menú seleccionado
   useEffect(() => {
@@ -111,6 +114,78 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
     setEditing(false);
     setForm({ name: "", price: "", imageUrl: "", description: "", active: true });
   }, [initialMenu.id, initialMenu.items]);
+
+  // ✨ Generar descripción con IA (formulario crear)
+  async function generateDescription() {
+    if (!form.name.trim()) {
+      alert("Por favor ingresa el nombre del platillo primero");
+      return;
+    }
+
+    setGeneratingAI(true);
+    setFormErr(null);
+
+    try {
+      const res = await fetch("/api/ai/generate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre: form.name,
+          imageUrl: form.imageUrl || null,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setFormErr(data.error || "No se pudo generar la descripción");
+        return;
+      }
+
+      setForm((prev) => ({ ...prev, description: data.description }));
+    } catch (error) {
+      console.error("Error:", error);
+      setFormErr("Error al conectar con el servicio de IA");
+    } finally {
+      setGeneratingAI(false);
+    }
+  }
+
+  // ✨ Generar descripción con IA (formulario editar)
+  async function generateEditDescription() {
+    if (!editData.name.trim()) {
+      alert("El nombre del platillo no puede estar vacío");
+      return;
+    }
+
+    setGeneratingEditAI(true);
+    setEditErr(null);
+
+    try {
+      const res = await fetch("/api/ai/generate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre: editData.name,
+          imageUrl: editData.imageUrl || null,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setEditErr(data.error || "No se pudo generar la descripción");
+        return;
+      }
+
+      setEditData((prev) => ({ ...prev, description: data.description }));
+    } catch (error) {
+      console.error("Error:", error);
+      setEditErr("Error al conectar con el servicio de IA");
+    } finally {
+      setGeneratingEditAI(false);
+    }
+  }
 
   async function createItem(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -253,10 +328,10 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
           .map((x) =>
             x.id === editingId
               ? {
-                  ...x,
-                  ...parsed.data,
-                  price: parsed.data.price !== undefined ? Number(parsed.data.price) : x.price,
-                }
+                ...x,
+                ...parsed.data,
+                price: parsed.data.price !== undefined ? Number(parsed.data.price) : x.price,
+              }
               : x
           )
           .sort((a, b) => a.name.localeCompare(b.name))
@@ -323,9 +398,8 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
           <div>
             <label className="block text-sm">Nombre *</label>
             <input
-              className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                fieldErr.name ? "border-red-500" : "border-zinc-300"
-              }`}
+              className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${fieldErr.name ? "border-red-500" : "border-zinc-300"
+                }`}
               value={form.name}
               onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
               aria-invalid={Boolean(fieldErr.name)}
@@ -339,9 +413,8 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
             <input
               type="number"
               inputMode="numeric"
-              className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                fieldErr.price ? "border-red-500" : "border-zinc-300"
-              }`}
+              className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${fieldErr.price ? "border-red-500" : "border-zinc-300"
+                }`}
               value={form.price}
               onChange={(e) => setForm((p) => ({ ...p, price: e.target.value }))}
               aria-invalid={Boolean(fieldErr.price)}
@@ -354,9 +427,8 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
           <div>
             <label className="block text-sm">Imagen (URL opcional)</label>
             <input
-              className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                fieldErr.imageUrl ? "border-red-500" : "border-zinc-300"
-              }`}
+              className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${fieldErr.imageUrl ? "border-red-500" : "border-zinc-300"
+                }`}
               value={form.imageUrl}
               onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
               aria-invalid={Boolean(fieldErr.imageUrl)}
@@ -366,18 +438,44 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
           </div>
 
           <div>
-            <label className="block text-sm">Descripción (opcional)</label>
+            <div className="flex items-center justify-between">
+              <label className="block text-sm">Descripción (opcional)</label>
+              <button
+                type="button"
+                onClick={generateDescription}
+                disabled={generatingAI || !form.name.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium
+                         bg-gradient-to-r from-purple-500 to-pink-500 text-white
+                         hover:from-purple-600 hover:to-pink-600 transition
+                         focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500
+                         disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generatingAI ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Generando...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Generar con IA
+                  </>
+                )}
+              </button>
+            </div>
             <textarea
               rows={3}
-              className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                fieldErr.description ? "border-red-500" : "border-zinc-300"
-              }`}
+              className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${fieldErr.description ? "border-red-500" : "border-zinc-300"
+                }`}
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
               aria-invalid={Boolean(fieldErr.description)}
               placeholder="Tortilla de maíz, cerdo marinado, piña, cebolla y cilantro."
             />
             {fieldErr.description && <p className="mt-1 text-xs text-red-600">{fieldErr.description}</p>}
+            <p className="mt-1 text-xs text-zinc-500">
+              💡 Tip: Si agregaste una URL de imagen, la IA la analizará para crear una mejor descripción
+            </p>
           </div>
 
           <label className="inline-flex items-center gap-2 text-sm">
@@ -429,9 +527,8 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
                       <div>
                         <label className="block text-sm">Nombre *</label>
                         <input
-                          className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                            editFieldErr.name ? "border-red-500" : "border-zinc-300"
-                          }`}
+                          className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${editFieldErr.name ? "border-red-500" : "border-zinc-300"
+                            }`}
                           value={editData.name}
                           onChange={(e) => setEditData((p) => ({ ...p, name: e.target.value }))}
                           aria-invalid={Boolean(editFieldErr.name)}
@@ -443,9 +540,8 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
                         <input
                           type="number"
                           inputMode="numeric"
-                          className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                            editFieldErr.price ? "border-red-500" : "border-zinc-300"
-                          }`}
+                          className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${editFieldErr.price ? "border-red-500" : "border-zinc-300"
+                            }`}
                           value={editData.price}
                           onChange={(e) => setEditData((p) => ({ ...p, price: e.target.value }))}
                           aria-invalid={Boolean(editFieldErr.price)}
@@ -457,33 +553,55 @@ export default function MenuItemsManager({ initialMenu }: { initialMenu: MenuDat
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm">Imagen (URL)</label>
-                        <input
-                          className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                            editFieldErr.imageUrl ? "border-red-500" : "border-zinc-300"
+                    <div>
+                      <label className="block text-sm">Imagen (URL)</label>
+                      <input
+                        className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${editFieldErr.imageUrl ? "border-red-500" : "border-zinc-300"
                           }`}
-                          value={editData.imageUrl}
-                          onChange={(e) => setEditData((p) => ({ ...p, imageUrl: e.target.value }))}
-                          aria-invalid={Boolean(editFieldErr.imageUrl)}
-                        />
-                        {editFieldErr.imageUrl && <p className="mt-1 text-xs text-red-600">{editFieldErr.imageUrl}</p>}
-                      </div>
-                      <div>
+                        value={editData.imageUrl}
+                        onChange={(e) => setEditData((p) => ({ ...p, imageUrl: e.target.value }))}
+                        aria-invalid={Boolean(editFieldErr.imageUrl)}
+                      />
+                      {editFieldErr.imageUrl && <p className="mt-1 text-xs text-red-600">{editFieldErr.imageUrl}</p>}
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
                         <label className="block text-sm">Descripción</label>
-                        <input
-                          className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                            editFieldErr.description ? "border-red-500" : "border-zinc-300"
-                          }`}
-                          value={editData.description}
-                          onChange={(e) => setEditData((p) => ({ ...p, description: e.target.value }))}
-                          aria-invalid={Boolean(editFieldErr.description)}
-                        />
-                        {editFieldErr.description && (
-                          <p className="mt-1 text-xs text-red-600">{editFieldErr.description}</p>
-                        )}
+                        <button
+                          type="button"
+                          onClick={generateEditDescription}
+                          disabled={generatingEditAI || !editData.name.trim()}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium
+                                   bg-gradient-to-r from-purple-500 to-pink-500 text-white
+                                   hover:from-purple-600 hover:to-pink-600 transition
+                                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500
+                                   disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {generatingEditAI ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              Generando...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Generar con IA
+                            </>
+                          )}
+                        </button>
                       </div>
+                      <textarea
+                        rows={2}
+                        className={`mt-1 w-full rounded-xl border px-3 py-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${editFieldErr.description ? "border-red-500" : "border-zinc-300"
+                          }`}
+                        value={editData.description}
+                        onChange={(e) => setEditData((p) => ({ ...p, description: e.target.value }))}
+                        aria-invalid={Boolean(editFieldErr.description)}
+                      />
+                      {editFieldErr.description && (
+                        <p className="mt-1 text-xs text-red-600">{editFieldErr.description}</p>
+                      )}
                     </div>
 
                     <label className="inline-flex items-center gap-2 text-sm">
